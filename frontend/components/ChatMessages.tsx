@@ -22,7 +22,7 @@ export default function ChatMessages({ messages, isLoading }: ChatMessagesProps)
 
   if (messages.length === 0 && !isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8 bg-gradient-to-br from-blue-50/50 via-indigo-50/30 to-purple-50/50">
+      <div className="flex-1 flex items-start justify-center pt-20 p-8 bg-gradient-to-br from-blue-50/50 via-indigo-50/30 to-purple-50/50">
         <div className="text-center max-w-xl">
           <div className="relative mb-8">
             <div className="text-6xl mb-4 animate-bounce inline-block">👋</div>
@@ -34,14 +34,14 @@ export default function ChatMessages({ messages, isLoading }: ChatMessagesProps)
           <p className="text-gray-600 mb-6 text-base leading-relaxed">
             我可以帮助你解答问题、编写代码、提供建议等
           </p>
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 mt-8 border border-blue-100">
-            <div className="flex items-start gap-3 mb-4">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl py-5 px-8 mt-8 border border-blue-100 max-w-2xl mx-auto w-full">
+            <div className="flex items-center justify-center gap-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white flex-shrink-0">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <div className="text-left flex-1">
+              <div className="text-center">
                 <p className="text-blue-600 font-semibold text-sm mb-1">点击下方输入框即可开始对话</p>
                 <p className="text-gray-500 text-xs">支持多轮对话，我会记住上下文</p>
               </div>
