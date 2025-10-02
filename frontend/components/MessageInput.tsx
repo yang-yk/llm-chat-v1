@@ -10,6 +10,7 @@ interface MessageInputProps {
 
 export default function MessageInput({ onSendMessage, onFocus, disabled = false }: MessageInputProps) {
   const [message, setMessage] = useState('');
+  const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSend = () => {
@@ -27,7 +28,7 @@ export default function MessageInput({ onSendMessage, onFocus, disabled = false 
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
       e.preventDefault();
       // 只有在不是加载状态时才发送
       if (!disabled) {
@@ -60,6 +61,8 @@ export default function MessageInput({ onSendMessage, onFocus, disabled = false 
             value={message}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
             onFocus={onFocus}
             placeholder={disabled ? "AI 正在回复中，请稍候..." : "输入你的消息...（Shift + Enter 换行，Enter 发送）"}
             rows={1}
