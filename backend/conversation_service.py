@@ -12,24 +12,25 @@ class ConversationService:
     """对话管理服务类"""
 
     @staticmethod
-    def create_conversation(db: Session) -> str:
+    def create_conversation(db: Session, user_id: int) -> str:
         """
         创建新的对话会话
 
         Args:
             db: 数据库会话
+            user_id: 用户ID
 
         Returns:
             新创建的session_id
         """
         session_id = str(uuid.uuid4())
-        conversation = Conversation(session_id=session_id)
+        conversation = Conversation(session_id=session_id, user_id=user_id)
         db.add(conversation)
         db.commit()
         db.refresh(conversation)
 
         # 每次创建新对话时检查并清理旧对话
-        ConversationService.cleanup_old_conversations(db)
+        ConversationService.cleanup_old_conversations(db, user_id)
 
         return session_id
 
@@ -207,18 +208,21 @@ class ConversationService:
             db.commit()
 
     @staticmethod
-    def list_conversations(db: Session) -> List[Dict]:
+    def list_conversations(db: Session, user_id: int) -> List[Dict]:
         """
-        获取所有对话会话列表(只返回最近500条)
+        获取用户的所有对话会话列表(只返回最近500条)
 
         Args:
             db: 数据库会话
+            user_id: 用户ID
 
         Returns:
             会话列表(最多500条)
         """
-        # 只获取最近更新的500条对话
-        conversations = db.query(Conversation).order_by(Conversation.updated_at.desc()).limit(500).all()
+        # 只获取该用户最近更新的500条对话
+        conversations = db.query(Conversation).filter(
+            Conversation.user_id == user_id
+        ).order_by(Conversation.updated_at.desc()).limit(500).all()
         return [
             {
                 "session_id": conv.session_id,
@@ -231,19 +235,22 @@ class ConversationService:
         ]
 
     @staticmethod
-    def cleanup_old_conversations(db: Session):
+    def cleanup_old_conversations(db: Session, user_id: int):
         """
-        清理超过500条的旧对话记录
+        清理用户超过500条的旧对话记录
 
         Args:
             db: 数据库会话
+            user_id: 用户ID
         """
-        # 获取总对话数
-        total_count = db.query(Conversation).count()
+        # 获取该用户的总对话数
+        total_count = db.query(Conversation).filter(Conversation.user_id == user_id).count()
 
         if total_count > 500:
             # 获取第500条之后的所有对话ID
-            old_conversations = db.query(Conversation).order_by(
+            old_conversations = db.query(Conversation).filter(
+                Conversation.user_id == user_id
+            ).order_by(
                 Conversation.updated_at.desc()
             ).offset(500).all()
 
@@ -252,15 +259,16 @@ class ConversationService:
                 db.delete(conv)
 
             db.commit()
-            print(f"已清理 {len(old_conversations)} 条旧对话记录")
+            print(f"已清理用户 {user_id} 的 {len(old_conversations)} 条旧对话记录")
 
     @staticmethod
-    def search_conversations(db: Session, query: str) -> List[Dict]:
+    def search_conversations(db: Session, user_id: int, query: str) -> List[Dict]:
         """
-        在所有对话中搜索包含关键词的对话
+        在用户的对话中搜索包含关键词的对话
 
         Args:
             db: 数据库会话
+            user_id: 用户ID
             query: 搜索关键词
 
         Returns:
@@ -272,13 +280,15 @@ class ConversationService:
         # 搜索标题或消息内容中包含关键词的对话
         search_pattern = f"%{query}%"
 
-        # 查找标题匹配的对话
+        # 查找标题匹配的对话（仅限该用户）
         title_matches = db.query(Conversation).filter(
+            Conversation.user_id == user_id,
             Conversation.title.like(search_pattern)
         ).order_by(Conversation.updated_at.desc()).limit(100).all()
 
-        # 查找消息内容匹配的对话
+        # 查找消息内容匹配的对话（仅限该用户）
         message_matches = db.query(Conversation).join(Message).filter(
+            Conversation.user_id == user_id,
             Message.content.like(search_pattern)
         ).order_by(Conversation.updated_at.desc()).limit(100).all()
 

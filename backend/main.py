@@ -1,19 +1,29 @@
 """
 FastAPI主应用和路由
 """
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
+from datetime import timedelta
 import os
 import json
 
-from database import get_db, init_db, UserConfig
+from database import get_db, init_db, UserConfig, User
 from conversation_service import conversation_service
 from config import HOST, PORT
+from auth import (
+    get_password_hash,
+    authenticate_user,
+    create_access_token,
+    get_current_active_user,
+    get_current_user,
+    ACCESS_TOKEN_EXPIRE_MINUTES
+)
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -74,6 +84,32 @@ class ConfigUpdateRequest(BaseModel):
     llm_model: Optional[str] = None  # 仅custom时需要
     llm_api_key: Optional[str] = None  # 仅custom时需要
     max_tokens: Optional[int] = None  # 最大输出token数
+
+
+# 认证相关模型
+class UserRegister(BaseModel):
+    username: str
+    password: str
+    email: Optional[str] = None
+
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: Dict[str, any]
+
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: Optional[str]
+    is_active: bool
+    created_at: str
 
 
 # 启动事件：初始化数据库
@@ -137,6 +173,113 @@ async def health():
     """健康检查接口"""
     return {"status": "ok", "message": "大模型对话后端服务运行中", "version": "1.0.0"}
 
+
+# ==================== 认证相关API ====================
+
+@app.post("/api/auth/register", response_model=Token)
+async def register(user_data: UserRegister, db: Session = Depends(get_db)):
+    """用户注册"""
+    # 检查用户名是否已存在
+    existing_user = db.query(User).filter(User.username == user_data.username).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用户名已存在"
+        )
+
+    # 检查邮箱是否已存在
+    if user_data.email:
+        existing_email = db.query(User).filter(User.email == user_data.email).first()
+        if existing_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="邮箱已被注册"
+            )
+
+    # 创建新用户
+    hashed_password = get_password_hash(user_data.password)
+    new_user = User(
+        username=user_data.username,
+        hashed_password=hashed_password,
+        email=user_data.email
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    # 为新用户创建默认配置
+    user_config = UserConfig(
+        user_id=new_user.id,
+        current_model_type="codegeex",
+        max_tokens=2000
+    )
+    db.add(user_config)
+    db.commit()
+
+    # 生成访问令牌
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": new_user.id}, expires_delta=access_token_expires
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": new_user.id,
+            "username": new_user.username,
+            "email": new_user.email
+        }
+    }
+
+
+@app.post("/api/auth/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """用户登录"""
+    user = authenticate_user(db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户名或密码错误",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用户已被禁用"
+        )
+
+    # 生成访问令牌
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.id}, expires_delta=access_token_expires
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email
+        }
+    }
+
+
+@app.get("/api/auth/me", response_model=UserResponse)
+async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
+    """获取当前用户信息"""
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at.isoformat()
+    }
+
+
+# ==================== 对话相关API ====================
 
 @app.post("/conversations", response_model=CreateConversationResponse)
 async def create_conversation(db: Session = Depends(get_db)):

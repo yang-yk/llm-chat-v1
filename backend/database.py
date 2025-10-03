@@ -1,7 +1,7 @@
 """
 数据库模型和会话管理
 """
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime, timezone, timedelta
@@ -17,17 +17,36 @@ def get_beijing_time():
     return datetime.now(BEIJING_TZ)
 
 
+class User(Base):
+    """用户表"""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, index=True, nullable=False)  # 用户名，唯一
+    hashed_password = Column(String(200), nullable=False)  # 加密后的密码
+    email = Column(String(100), unique=True, index=True, nullable=True)  # 邮箱（可选）
+    is_active = Column(Boolean, default=True, nullable=False)  # 是否激活
+    created_at = Column(DateTime, default=get_beijing_time)
+    updated_at = Column(DateTime, default=get_beijing_time, onupdate=get_beijing_time)
+
+    # 关联对话和配置
+    conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
+    config = relationship("UserConfig", back_populates="user", uselist=False, cascade="all, delete-orphan")
+
+
 class Conversation(Base):
     """对话会话表"""
     __tablename__ = "conversations"
 
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(String(100), unique=True, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # 所属用户ID
     title = Column(String(200), default="新对话", nullable=False)  # 对话标题
     created_at = Column(DateTime, default=get_beijing_time)
     updated_at = Column(DateTime, default=get_beijing_time, onupdate=get_beijing_time)
 
-    # 关联消息
+    # 关联用户和消息
+    user = relationship("User", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
 
 
@@ -50,7 +69,7 @@ class UserConfig(Base):
     __tablename__ = "user_configs"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_identifier = Column(String(100), unique=True, index=True, nullable=False)  # 用户标识(session_id或user_id)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)  # 用户ID
     current_model_type = Column(String(50), default="codegeex", nullable=False)  # 当前模型类型: codegeex/glm/custom
     max_tokens = Column(Integer, default=2000, nullable=False)  # 最大token数
 
@@ -61,6 +80,9 @@ class UserConfig(Base):
 
     created_at = Column(DateTime, default=get_beijing_time)
     updated_at = Column(DateTime, default=get_beijing_time, onupdate=get_beijing_time)
+
+    # 关联用户
+    user = relationship("User", back_populates="config")
 
 
 # 创建数据库引擎
