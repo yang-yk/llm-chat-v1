@@ -162,8 +162,11 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     try:
         from llm_service import llm_service
 
+        print(f"\n[CHAT REQUEST] user_id: {request.user_id}, session_id: {request.session_id}, stream: {request.stream}")
+
         # 获取用户配置
         user_config = db.query(UserConfig).filter_by(user_identifier=request.user_id).first()
+        print(f"[USER CONFIG] Found: {user_config is not None}")
 
         # 确定使用的 max_tokens 和模型配置
         if request.max_tokens:
@@ -176,6 +179,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         # 根据用户配置设置LLM服务
         if user_config:
             model_type = user_config.current_model_type
+            print(f"[DEBUG] 使用用户配置，模型类型: {model_type}, user_id: {request.user_id}")
             if model_type == "codegeex":
                 llm_service.api_url = PRESET_MODELS["codegeex"]["url"]
                 llm_service.model = PRESET_MODELS["codegeex"]["model"]
@@ -188,12 +192,26 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 llm_service.api_url = user_config.custom_api_url
                 llm_service.model = user_config.custom_model
                 llm_service.api_key = user_config.custom_api_key
+        else:
+            # 没有用户配置时，使用全局当前模型类型
+            print(f"[DEBUG] 没有用户配置，使用全局默认: {current_model_type}, user_id: {request.user_id}")
+            if current_model_type == "codegeex":
+                llm_service.api_url = PRESET_MODELS["codegeex"]["url"]
+                llm_service.model = PRESET_MODELS["codegeex"]["model"]
+                llm_service.api_key = PRESET_MODELS["codegeex"]["key"]
+            elif current_model_type == "glm":
+                llm_service.api_url = PRESET_MODELS["glm"]["url"]
+                llm_service.model = PRESET_MODELS["glm"]["model"]
+                llm_service.api_key = PRESET_MODELS["glm"]["key"]
+
+        print(f"[MODEL CONFIG] API: {llm_service.api_url}, Model: {llm_service.model}")
 
         # 如果请求流式响应
         if request.stream:
             async def event_generator():
                 """生成SSE事件流"""
                 try:
+                    chunk_count = 0
                     async for chunk in conversation_service.chat_stream(
                         db=db,
                         session_id=request.session_id,
@@ -201,13 +219,16 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                         temperature=request.temperature,
                         max_tokens=max_tokens
                     ):
+                        chunk_count += 1
                         # 发送SSE格式的数据
                         yield f"data: {json.dumps({'chunk': chunk}, ensure_ascii=False)}\n\n"
 
+                    print(f"[STREAM COMPLETE] Sent {chunk_count} chunks")
                     # 发送完成信号
                     yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
 
                 except Exception as e:
+                    print(f"[STREAM ERROR] {str(e)}")
                     # 发送错误信息
                     yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
 

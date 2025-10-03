@@ -36,6 +36,20 @@ export default function SettingsModal({ isOpen, config, onClose, onSave }: Setti
   }, [config]);
 
   const handleSave = () => {
+    // 验证 maxTokens
+    if (isNaN(maxTokens) || maxTokens < 1 || maxTokens > 100000) {
+      alert('最大输出长度必须在 1 到 100000 之间');
+      return;
+    }
+
+    // 验证自定义模型配置
+    if (modelType === 'custom') {
+      if (!customApiUrl.trim() || !customModel.trim()) {
+        alert('自定义模型需要提供 API 地址和模型名称');
+        return;
+      }
+    }
+
     const settings: any = {
       modelType,
       maxTokens,
@@ -194,14 +208,33 @@ export default function SettingsModal({ isOpen, config, onClose, onSave }: Setti
               <input
                 type="number"
                 value={maxTokens}
-                onChange={(e) => setMaxTokens(parseInt(e.target.value))}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value);
+                  if (!isNaN(value)) {
+                    setMaxTokens(value);
+                  }
+                }}
                 min="1"
                 max="100000"
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              <p className="text-xs text-gray-500 mt-1.5">
-                模型单次回复的最大 token 数量（1-100000，默认 2000）
-              </p>
+              <div className="mt-1.5 space-y-1">
+                <p className="text-xs text-gray-500">
+                  模型单次回复的最大 token 数量（1-100000，默认 2000）
+                </p>
+                {/* 不同模型的限制提示 */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 mt-2">
+                  <p className="text-xs font-medium text-blue-800 mb-1.5">📋 模型限制说明：</p>
+                  <ul className="text-xs text-blue-700 space-y-0.5 ml-3">
+                    <li>• <span className="font-medium">CodeGeex</span>: 建议 ≤ 8000 tokens</li>
+                    <li>• <span className="font-medium">GLM-4</span>: 最大 32768 tokens（建议 ≤ 8000）</li>
+                    <li>• <span className="font-medium">自定义模型</span>: 请参考模型文档</li>
+                  </ul>
+                  <p className="text-xs text-blue-600 mt-1.5 italic">
+                    ⚠️ 设置过大可能导致模型返回错误
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

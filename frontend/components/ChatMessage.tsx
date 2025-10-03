@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import type { Message } from '@/lib/types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import CodeBlock from './CodeBlock';
 
 interface ChatMessageProps {
   message: Message;
@@ -13,11 +14,6 @@ interface ChatMessageProps {
 export default function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const codeBlockCounter = useRef(0);
-
-  // 每次渲染时重置计数器
-  codeBlockCounter.current = 0;
 
   const handleCopyMessage = async () => {
     try {
@@ -26,18 +22,6 @@ export default function ChatMessage({ message }: ChatMessageProps) {
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('复制失败:', err);
-    }
-  };
-
-  const handleCopyCode = async (code: string, id: string) => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopiedCode(id);
-      setTimeout(() => setCopiedCode(null), 2000);
-      console.log('代码已复制到剪贴板');
-    } catch (err) {
-      console.error('复制失败:', err);
-      alert('复制失败，请重试');
     }
   };
 
@@ -119,96 +103,8 @@ export default function ChatMessage({ message }: ChatMessageProps) {
                       const codeContent = extractText(children).replace(/\n$/, '');
                       const language = getLanguage(children);
 
-                      // 语言显示名称映射
-                      const languageNames: { [key: string]: string } = {
-                        'javascript': 'JavaScript',
-                        'typescript': 'TypeScript',
-                        'python': 'Python',
-                        'java': 'Java',
-                        'cpp': 'C++',
-                        'c': 'C',
-                        'csharp': 'C#',
-                        'go': 'Go',
-                        'rust': 'Rust',
-                        'php': 'PHP',
-                        'ruby': 'Ruby',
-                        'swift': 'Swift',
-                        'kotlin': 'Kotlin',
-                        'html': 'HTML',
-                        'css': 'CSS',
-                        'scss': 'SCSS',
-                        'json': 'JSON',
-                        'xml': 'XML',
-                        'yaml': 'YAML',
-                        'markdown': 'Markdown',
-                        'bash': 'Bash',
-                        'shell': 'Shell',
-                        'sql': 'SQL',
-                        'jsx': 'JSX',
-                        'tsx': 'TSX',
-                      };
-
-                      const displayLanguage = language ? (languageNames[language.toLowerCase()] || language.toUpperCase()) : 'CODE';
-
-                      // 使用消息内容的hash和计数器来生成稳定的ID
-                      codeBlockCounter.current += 1;
-                      const codeId = `code-${message.content.length}-${codeBlockCounter.current}`;
-
-                      return (
-                        <div className="relative group w-full max-w-full">
-                          <pre className="rounded-lg pt-12 pb-4 px-4 my-3 overflow-x-auto bg-gray-50 shadow-sm border border-gray-300 w-full max-w-full block" {...props}>
-                            {children}
-                          </pre>
-                          {/* 语言标签 */}
-                          <div className="absolute top-2 left-3 px-2.5 py-1 bg-gray-200 text-gray-700 rounded text-xs font-medium">
-                            {displayLanguage}
-                          </div>
-                          {/* 固定在代码块内部的复制按钮（右上角） */}
-                          <button
-                            onClick={() => handleCopyCode(codeContent, codeId)}
-                            className="absolute top-2 right-2 px-2.5 py-1.5 bg-white hover:bg-gray-100 text-gray-600 hover:text-gray-900 rounded-md text-xs border border-gray-300 shadow-sm flex items-center gap-1.5 z-10"
-                            title="复制代码"
-                          >
-                            {copiedCode === codeId ? (
-                              <>
-                                <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                <span className="text-green-600">已复制</span>
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                </svg>
-                                <span>复制</span>
-                              </>
-                            )}
-                          </button>
-                          {/* 固定在视口的复制按钮（右下角，代码块滚动时可见，hover时显示） */}
-                          <button
-                            onClick={() => handleCopyCode(codeContent, codeId)}
-                            className="sticky bottom-2 float-right mr-2 mb-2 px-2.5 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 hover:text-blue-900 rounded-md text-xs shadow-md items-center gap-1.5 z-10 transition-all opacity-0 group-hover:opacity-100 group-hover:flex hidden group-hover:inline-flex"
-                            title="复制代码"
-                          >
-                            {copiedCode === codeId ? (
-                              <>
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                <span>已复制</span>
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                </svg>
-                                <span>复制</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      );
+                      // 使用 CodeBlock 组件，传递 rehype-highlight 处理后的 children
+                      return <CodeBlock code={codeContent} language={language}>{children}</CodeBlock>;
                     },
                     code: ({ node, className, children, ...props }) => {
                       const match = /language-(\w+)/.exec(className || '');

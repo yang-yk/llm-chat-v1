@@ -67,6 +67,11 @@ export default function Home() {
   };
 
   const handleNewChat = async () => {
+    // 如果正在生成，禁止创建新对话
+    if (isLoading) {
+      return;
+    }
+
     try {
       const sessionId = await createConversation();
       setCurrentSessionId(sessionId);
@@ -79,10 +84,20 @@ export default function Home() {
   };
 
   const handleSelectConversation = async (sessionId: string) => {
+    // 如果正在生成，禁止切换
+    if (isLoading) {
+      return;
+    }
+
     await loadConversationHistory(sessionId);
   };
 
   const handleDeleteConversation = async (sessionId: string) => {
+    // 如果正在生成且删除的是当前会话，禁止删除
+    if (isLoading && currentSessionId === sessionId) {
+      return;
+    }
+
     if (!confirm('确定要删除这个对话吗?')) return;
 
     try {
@@ -157,9 +172,18 @@ export default function Home() {
         console.log('用户已停止生成');
       } else {
         console.error('发送消息失败:', error);
-        alert('发送消息失败: ' + (error as Error).message);
-        // 移除失败的助手消息
-        setMessages((prev) => prev.slice(0, -1));
+
+        // 在聊天界面中显示错误消息，而不是用 alert
+        const errorMessage = (error as Error).message || '未知错误';
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          // 更新最后一条助手消息为错误提示
+          newMessages[newMessages.length - 1] = {
+            role: 'assistant',
+            content: `⚠️ **模型响应出错**\n\n抱歉，AI 模型在处理您的请求时遇到了问题。\n\n**错误信息：** ${errorMessage}\n\n**可能的原因：**\n- 模型服务暂时不可用\n- 网络连接问题\n- 请求超时\n\n**建议：**\n- 请稍后重试\n- 检查模型配置是否正确\n- 如问题持续，请联系管理员`,
+          };
+          return newMessages;
+        });
       }
     } finally {
       setIsLoading(false);
@@ -177,6 +201,12 @@ export default function Home() {
 
   const handleClearHistory = async () => {
     if (!currentSessionId) return;
+
+    // 如果正在生成，禁止清空对话
+    if (isLoading) {
+      return;
+    }
+
     if (!confirm('确定要清空当前对话吗?')) return;
 
     try {
@@ -205,7 +235,8 @@ export default function Home() {
       setIsSettingsOpen(false);
     } catch (error) {
       console.error('保存配置失败:', error);
-      alert('保存配置失败');
+      const errorMessage = (error as Error).message || '未知错误';
+      alert(`保存配置失败：${errorMessage}\n\n请检查配置是否正确，或查看控制台了解详细信息。`);
     }
   };
 
@@ -230,6 +261,7 @@ export default function Home() {
         conversations={conversations}
         currentSessionId={currentSessionId}
         isOpen={isSidebarOpen}
+        isLoading={isLoading}
         onNewChat={handleNewChat}
         onSelectConversation={handleSelectConversation}
         onDeleteConversation={handleDeleteConversation}
@@ -267,9 +299,11 @@ export default function Home() {
               />
               <button
                 onClick={handleClearHistory}
-                className="px-2 sm:px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-50 border border-gray-300 transition-all text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow"
-                disabled={!currentSessionId}
-                title="清空当前对话"
+                className={`px-2 sm:px-4 py-2 bg-white text-gray-700 rounded-lg border border-gray-300 transition-all text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 shadow-sm ${
+                  !currentSessionId || isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50 hover:shadow'
+                }`}
+                disabled={!currentSessionId || isLoading}
+                title={isLoading ? "AI 正在回复中，请稍候..." : "清空当前对话"}
               >
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -277,9 +311,15 @@ export default function Home() {
                 <span className="hidden sm:inline">清空对话</span>
               </button>
               <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="px-2 sm:px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-50 border border-gray-300 transition-all text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 shadow-sm hover:shadow"
-                title="模型设置"
+                onClick={() => {
+                  if (!isLoading) {
+                    setIsSettingsOpen(true);
+                  }
+                }}
+                className={`px-2 sm:px-4 py-2 bg-white text-gray-700 rounded-lg border border-gray-300 transition-all text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 shadow-sm ${
+                  isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50 hover:shadow'
+                }`}
+                title={isLoading ? "AI 正在回复中，请稍候..." : "模型设置"}
               >
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
