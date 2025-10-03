@@ -254,6 +254,72 @@ class ConversationService:
             db.commit()
             print(f"已清理 {len(old_conversations)} 条旧对话记录")
 
+    @staticmethod
+    def search_conversations(db: Session, query: str) -> List[Dict]:
+        """
+        在所有对话中搜索包含关键词的对话
+
+        Args:
+            db: 数据库会话
+            query: 搜索关键词
+
+        Returns:
+            包含关键词的对话列表
+        """
+        if not query or not query.strip():
+            return []
+
+        # 搜索标题或消息内容中包含关键词的对话
+        search_pattern = f"%{query}%"
+
+        # 查找标题匹配的对话
+        title_matches = db.query(Conversation).filter(
+            Conversation.title.like(search_pattern)
+        ).order_by(Conversation.updated_at.desc()).limit(100).all()
+
+        # 查找消息内容匹配的对话
+        message_matches = db.query(Conversation).join(Message).filter(
+            Message.content.like(search_pattern)
+        ).order_by(Conversation.updated_at.desc()).limit(100).all()
+
+        # 合并结果并去重
+        conversation_dict = {}
+        for conv in title_matches + message_matches:
+            if conv.session_id not in conversation_dict:
+                # 统计匹配的消息数
+                match_count = db.query(Message).filter(
+                    Message.conversation_id == conv.id,
+                    Message.content.like(search_pattern)
+                ).count()
+
+                # 获取第一条匹配的消息片段
+                first_match = db.query(Message).filter(
+                    Message.conversation_id == conv.id,
+                    Message.content.like(search_pattern)
+                ).first()
+
+                preview = ""
+                if first_match:
+                    content = first_match.content
+                    index = content.lower().find(query.lower())
+                    if index != -1:
+                        start = max(0, index - 50)
+                        end = min(len(content), index + len(query) + 50)
+                        preview = content[start:end]
+
+                conversation_dict[conv.session_id] = {
+                    "session_id": conv.session_id,
+                    "title": conv.title,
+                    "created_at": conv.created_at.isoformat(),
+                    "updated_at": conv.updated_at.isoformat(),
+                    "message_count": len(conv.messages),
+                    "match_count": match_count,
+                    "preview": preview
+                }
+
+        # 按更新时间排序
+        return sorted(conversation_dict.values(), key=lambda x: x["updated_at"], reverse=True)
+
 
 # 创建全局对话服务实例
 conversation_service = ConversationService()

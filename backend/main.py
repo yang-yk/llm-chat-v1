@@ -280,6 +280,25 @@ async def list_conversations(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"获取会话列表失败: {str(e)}")
 
 
+@app.get("/conversations/search")
+async def search_conversations(q: str, db: Session = Depends(get_db)):
+    """
+    搜索对话
+
+    Args:
+        q: 搜索关键词
+        db: 数据库会话
+
+    Returns:
+        包含关键词的对话列表
+    """
+    try:
+        results = conversation_service.search_conversations(db, q)
+        return {"results": results, "query": q, "count": len(results)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"搜索失败: {str(e)}")
+
+
 @app.get("/api/config")
 async def get_config(user_id: str, db: Session = Depends(get_db)):
     """获取用户LLM配置"""

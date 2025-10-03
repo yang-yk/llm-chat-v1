@@ -8,6 +8,11 @@ const nextConfig = {
       },
     ]
   },
+  // 禁用开发工具面板（可选）
+  devIndicators: {
+    buildActivity: false,
+    buildActivityPosition: 'bottom-right',
+  },
 }
 
 module.exports = nextConfig

@@ -96,7 +96,60 @@ export default function ChatMessage({ message }: ChatMessageProps) {
                         return '';
                       };
 
+                      // 提取语言类型
+                      const getLanguage = (element: any): string => {
+                        if (element && typeof element === 'object') {
+                          if (element.props && element.props.className) {
+                            const match = /language-(\w+)/.exec(element.props.className);
+                            if (match) return match[1];
+                          }
+                          if (element.props && element.props.children) {
+                            return getLanguage(element.props.children);
+                          }
+                        }
+                        if (Array.isArray(element)) {
+                          for (const child of element) {
+                            const lang = getLanguage(child);
+                            if (lang) return lang;
+                          }
+                        }
+                        return '';
+                      };
+
                       const codeContent = extractText(children).replace(/\n$/, '');
+                      const language = getLanguage(children);
+
+                      // 语言显示名称映射
+                      const languageNames: { [key: string]: string } = {
+                        'javascript': 'JavaScript',
+                        'typescript': 'TypeScript',
+                        'python': 'Python',
+                        'java': 'Java',
+                        'cpp': 'C++',
+                        'c': 'C',
+                        'csharp': 'C#',
+                        'go': 'Go',
+                        'rust': 'Rust',
+                        'php': 'PHP',
+                        'ruby': 'Ruby',
+                        'swift': 'Swift',
+                        'kotlin': 'Kotlin',
+                        'html': 'HTML',
+                        'css': 'CSS',
+                        'scss': 'SCSS',
+                        'json': 'JSON',
+                        'xml': 'XML',
+                        'yaml': 'YAML',
+                        'markdown': 'Markdown',
+                        'bash': 'Bash',
+                        'shell': 'Shell',
+                        'sql': 'SQL',
+                        'jsx': 'JSX',
+                        'tsx': 'TSX',
+                      };
+
+                      const displayLanguage = language ? (languageNames[language.toLowerCase()] || language.toUpperCase()) : 'CODE';
+
                       // 使用消息内容的hash和计数器来生成稳定的ID
                       codeBlockCounter.current += 1;
                       const codeId = `code-${message.content.length}-${codeBlockCounter.current}`;
@@ -106,6 +159,10 @@ export default function ChatMessage({ message }: ChatMessageProps) {
                           <pre className="rounded-lg pt-12 pb-4 px-4 my-3 overflow-x-auto bg-gray-50 shadow-sm border border-gray-300 w-full max-w-full block" {...props}>
                             {children}
                           </pre>
+                          {/* 语言标签 */}
+                          <div className="absolute top-2 left-3 px-2.5 py-1 bg-gray-200 text-gray-700 rounded text-xs font-medium">
+                            {displayLanguage}
+                          </div>
                           {/* 固定在代码块内部的复制按钮（右上角） */}
                           <button
                             onClick={() => handleCopyCode(codeContent, codeId)}

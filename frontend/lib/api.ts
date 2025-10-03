@@ -174,3 +174,15 @@ export async function updateConfig(config: ConfigUpdateRequest): Promise<void> {
     throw new Error('更新配置失败');
   }
 }
+
+// 搜索对话
+export async function searchConversations(query: string): Promise<Conversation[]> {
+  const response = await fetch(`${API_BASE_URL}/conversations/search?q=${encodeURIComponent(query)}`);
+
+  if (!response.ok) {
+    throw new Error('搜索对话失败');
+  }
+
+  const data = await response.json();
+  return data.results;
+}

@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import ChatMessages from '@/components/ChatMessages';
 import MessageInput from '@/components/MessageInput';
 import SettingsModal from '@/components/SettingsModal';
+import ExportMenu from '@/components/ExportMenu';
 import type { Conversation, Message, ConfigResponse } from '@/lib/types';
 import {
   getUserId,
@@ -15,6 +16,7 @@ import {
   sendMessageStream,
   getConfig,
   updateConfig,
+  searchConversations,
 } from '@/lib/api';
 
 export default function Home() {
@@ -207,6 +209,21 @@ export default function Home() {
     }
   };
 
+  const handleSearch = async (query: string) => {
+    try {
+      if (!query.trim()) {
+        // 如果搜索为空，重新加载所有对话
+        await loadConversations();
+        return;
+      }
+
+      const results = await searchConversations(query);
+      setConversations(results);
+    } catch (error) {
+      console.error('搜索失败:', error);
+    }
+  };
+
   return (
     <div className="h-screen flex bg-white">
       <Sidebar
@@ -217,6 +234,7 @@ export default function Home() {
         onSelectConversation={handleSelectConversation}
         onDeleteConversation={handleDeleteConversation}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        onSearch={handleSearch}
       />
 
       <main
@@ -242,6 +260,11 @@ export default function Home() {
               </h1>
             </div>
             <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+              <ExportMenu
+                messages={messages}
+                conversationTitle={conversations.find(c => c.session_id === currentSessionId)?.title || '对话记录'}
+                disabled={messages.length === 0}
+              />
               <button
                 onClick={handleClearHistory}
                 className="px-2 sm:px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-50 border border-gray-300 transition-all text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow"

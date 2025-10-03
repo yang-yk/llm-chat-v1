@@ -11,6 +11,7 @@ interface SidebarProps {
   onSelectConversation: (sessionId: string) => void;
   onDeleteConversation: (sessionId: string) => void;
   onToggleSidebar: () => void;
+  onSearch?: (query: string) => void;
 }
 
 export default function Sidebar({
@@ -21,8 +22,10 @@ export default function Sidebar({
   onSelectConversation,
   onDeleteConversation,
   onToggleSidebar,
+  onSearch,
 }: SidebarProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   return (
     <>
@@ -67,6 +70,42 @@ export default function Sidebar({
               新对话
             </span>
           </button>
+        </div>
+
+        {/* 搜索框 */}
+        <div className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-gray-200 bg-white/50">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                if (onSearch) {
+                  onSearch(e.target.value);
+                }
+              }}
+              placeholder="搜索对话..."
+              className="w-full pl-9 pr-8 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  if (onSearch) {
+                    onSearch('');
+                  }
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 rounded"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="px-3 sm:px-4 py-2 sm:py-2.5 bg-amber-50 text-amber-700 text-xs border-b border-gray-200 flex items-center gap-2">

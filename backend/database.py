@@ -4,10 +4,17 @@
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from config import DATABASE_URL
 
 Base = declarative_base()
+
+# 北京时间时区 (UTC+8)
+BEIJING_TZ = timezone(timedelta(hours=8))
+
+def get_beijing_time():
+    """获取当前北京时间"""
+    return datetime.now(BEIJING_TZ)
 
 
 class Conversation(Base):
@@ -17,8 +24,8 @@ class Conversation(Base):
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(String(100), unique=True, index=True, nullable=False)
     title = Column(String(200), default="新对话", nullable=False)  # 对话标题
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_beijing_time)
+    updated_at = Column(DateTime, default=get_beijing_time, onupdate=get_beijing_time)
 
     # 关联消息
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
@@ -32,7 +39,7 @@ class Message(Base):
     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
     role = Column(String(20), nullable=False)  # user 或 assistant
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_beijing_time)
 
     # 关联会话
     conversation = relationship("Conversation", back_populates="messages")
@@ -52,8 +59,8 @@ class UserConfig(Base):
     custom_model = Column(String(100), default="")
     custom_api_key = Column(String(200), default="")
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_beijing_time)
+    updated_at = Column(DateTime, default=get_beijing_time, onupdate=get_beijing_time)
 
 
 # 创建数据库引擎
