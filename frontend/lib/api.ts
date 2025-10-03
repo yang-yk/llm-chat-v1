@@ -9,25 +9,50 @@ import type {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// 获取或生成用户ID
-export function getUserId(): string {
-  if (typeof window === 'undefined') return '';
+// 获取token
+export function getToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('access_token');
+}
 
-  let userId = localStorage.getItem('user_id');
-  if (!userId) {
-    userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem('user_id', userId);
+// 获取用户信息
+export function getUser(): any {
+  if (typeof window === 'undefined') return null;
+  const userStr = localStorage.getItem('user');
+  return userStr ? JSON.parse(userStr) : null;
+}
+
+// 获取用户ID
+export function getUserId(): string {
+  const user = getUser();
+  return user?.id?.toString() || '';
+}
+
+// 创建带认证的请求头
+function getAuthHeaders(): HeadersInit {
+  const token = getToken();
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
-  return userId;
+
+  return headers;
 }
 
 // 创建新对话
 export async function createConversation(): Promise<string> {
   const response = await fetch(`${API_BASE_URL}/conversations`, {
     method: 'POST',
+    headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
     throw new Error('创建对话失败');
   }
 
@@ -37,9 +62,14 @@ export async function createConversation(): Promise<string> {
 
 // 获取所有对话列表
 export async function getConversations(): Promise<Conversation[]> {
-  const response = await fetch(`${API_BASE_URL}/conversations`);
+  const response = await fetch(`${API_BASE_URL}/conversations`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
     throw new Error('获取对话列表失败');
   }
 
@@ -49,9 +79,14 @@ export async function getConversations(): Promise<Conversation[]> {
 
 // 获取对话历史
 export async function getConversationHistory(sessionId: string): Promise<ConversationHistoryResponse> {
-  const response = await fetch(`${API_BASE_URL}/conversations/${sessionId}/history`);
+  const response = await fetch(`${API_BASE_URL}/conversations/${sessionId}/history`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
     throw new Error('获取对话历史失败');
   }
 
@@ -62,9 +97,13 @@ export async function getConversationHistory(sessionId: string): Promise<Convers
 export async function deleteConversation(sessionId: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/conversations/${sessionId}`, {
     method: 'DELETE',
+    headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
     throw new Error('删除对话失败');
   }
 }
@@ -73,13 +112,14 @@ export async function deleteConversation(sessionId: string): Promise<void> {
 export async function sendMessage(request: ChatRequest): Promise<ChatResponse> {
   const response = await fetch(`${API_BASE_URL}/chat`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(request),
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
     throw new Error('发送消息失败');
   }
 
@@ -90,13 +130,14 @@ export async function sendMessage(request: ChatRequest): Promise<ChatResponse> {
 export async function* sendMessageStream(request: ChatRequest): AsyncGenerator<string> {
   const response = await fetch(`${API_BASE_URL}/chat`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ ...request, stream: true }),
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
     throw new Error('发送消息失败');
   }
 
@@ -151,9 +192,14 @@ export async function* sendMessageStream(request: ChatRequest): AsyncGenerator<s
 
 // 获取配置
 export async function getConfig(userId: string): Promise<ConfigResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/config?user_id=${userId}`);
+  const response = await fetch(`${API_BASE_URL}/api/config?user_id=${userId}`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
     throw new Error('获取配置失败');
   }
 
@@ -164,25 +210,61 @@ export async function getConfig(userId: string): Promise<ConfigResponse> {
 export async function updateConfig(config: ConfigUpdateRequest): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/config`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(config),
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
     throw new Error('更新配置失败');
   }
 }
 
 // 搜索对话
 export async function searchConversations(query: string): Promise<Conversation[]> {
-  const response = await fetch(`${API_BASE_URL}/conversations/search?q=${encodeURIComponent(query)}`);
+  const response = await fetch(`${API_BASE_URL}/conversations/search?q=${encodeURIComponent(query)}`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
     throw new Error('搜索对话失败');
   }
 
   const data = await response.json();
   return data.results;
+}
+
+// 获取当前登录用户信息
+export async function getCurrentUser(): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      // 清除本地存储的过期信息
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('user');
+      }
+      throw new Error('未登录或登录已过期');
+    }
+    throw new Error('获取用户信息失败');
+  }
+
+  return response.json();
+}
+
+// 退出登录
+export function logout(): void {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    window.location.href = '/auth';
+  }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import ChatMessages from '@/components/ChatMessages';
 import MessageInput from '@/components/MessageInput';
@@ -9,6 +10,9 @@ import ExportMenu from '@/components/ExportMenu';
 import type { Conversation, Message, ConfigResponse } from '@/lib/types';
 import {
   getUserId,
+  getUser,
+  getToken,
+  logout,
   createConversation,
   getConversations,
   getConversationHistory,
@@ -20,6 +24,7 @@ import {
 } from '@/lib/api';
 
 export default function Home() {
+  const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -28,14 +33,34 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [config, setConfig] = useState<ConfigResponse | null>(null);
   const [userId, setUserId] = useState('');
+  const [userName, setUserName] = useState('');
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
 
   useEffect(() => {
-    // 初始化用户ID
-    setUserId(getUserId());
-    loadConversations();
-    loadConfig();
-  }, []);
+    // 检查用户是否登录
+    const checkAuth = () => {
+      const token = getToken();
+      const user = getUser();
+
+      if (!token || !user) {
+        // 未登录，跳转到登录页
+        router.push('/auth');
+        return false;
+      }
+
+      // 已登录，初始化用户信息
+      setUserId(user.id.toString());
+      setUserName(user.username);
+      setIsAuthChecking(false);
+      return true;
+    };
+
+    if (checkAuth()) {
+      loadConversations();
+      loadConfig();
+    }
+  }, [router]);
 
   const loadConfig = async () => {
     try {
@@ -51,8 +76,11 @@ export default function Home() {
     try {
       const convs = await getConversations();
       setConversations(convs);
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载对话列表失败:', error);
+      if (error.message?.includes('未登录') || error.message?.includes('过期')) {
+        router.push('/auth');
+      }
     }
   };
 
@@ -255,6 +283,24 @@ export default function Home() {
     }
   };
 
+  const handleLogout = () => {
+    if (confirm('确定要退出登录吗？')) {
+      logout();
+    }
+  };
+
+  // 认证检查中，显示加载状态
+  if (isAuthChecking) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🤖</div>
+          <p className="text-gray-600">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen flex bg-white">
       <Sidebar
@@ -292,6 +338,14 @@ export default function Home() {
               </h1>
             </div>
             <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+              {/* 用户信息 */}
+              <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg mr-2">
+                <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span className="text-sm text-gray-700 font-medium">{userName}</span>
+              </div>
+
               <ExportMenu
                 messages={messages}
                 conversationTitle={conversations.find(c => c.session_id === currentSessionId)?.title || '对话记录'}
@@ -326,6 +380,18 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
                 <span className="hidden sm:inline">设置</span>
+              </button>
+
+              {/* 退出登录按钮 */}
+              <button
+                onClick={handleLogout}
+                className="px-2 sm:px-4 py-2 bg-white text-red-600 rounded-lg hover:bg-red-50 border border-red-300 transition-all text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 shadow-sm hover:shadow"
+                title="退出登录"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span className="hidden sm:inline">退出</span>
               </button>
             </div>
           </div>

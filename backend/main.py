@@ -282,10 +282,13 @@ async def get_current_user_info(current_user: User = Depends(get_current_active_
 # ==================== 对话相关API ====================
 
 @app.post("/conversations", response_model=CreateConversationResponse)
-async def create_conversation(db: Session = Depends(get_db)):
+async def create_conversation(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
     """创建新的对话会话"""
     try:
-        session_id = conversation_service.create_conversation(db)
+        session_id = conversation_service.create_conversation(db, current_user.id)
         return CreateConversationResponse(
             session_id=session_id,
             message="对话会话创建成功"
@@ -295,7 +298,11 @@ async def create_conversation(db: Session = Depends(get_db)):
 
 
 @app.post("/chat")
-async def chat(request: ChatRequest, db: Session = Depends(get_db)):
+async def chat(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
     """
     统一的对话接口
     - 支持流式和非流式响应（通过stream参数控制）
@@ -308,7 +315,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         print(f"\n[CHAT REQUEST] user_id: {request.user_id}, session_id: {request.session_id}, stream: {request.stream}")
 
         # 获取用户配置
-        user_config = db.query(UserConfig).filter_by(user_identifier=request.user_id).first()
+        user_config = db.query(UserConfig).filter_by(user_id=current_user.id).first()
         print(f"[USER CONFIG] Found: {user_config is not None}")
 
         # 确定使用的 max_tokens 和模型配置
@@ -407,7 +414,11 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
 
 
 @app.get("/conversations/{session_id}/history", response_model=ConversationHistoryResponse)
-async def get_conversation_history(session_id: str, db: Session = Depends(get_db)):
+async def get_conversation_history(
+    session_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
     """获取对话历史"""
     try:
         messages = conversation_service.get_conversation_history(db, session_id)
@@ -425,7 +436,11 @@ async def get_conversation_history(session_id: str, db: Session = Depends(get_db
 
 
 @app.delete("/conversations/{session_id}")
-async def delete_conversation(session_id: str, db: Session = Depends(get_db)):
+async def delete_conversation(
+    session_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
     """删除对话会话"""
     try:
         conversation_service.delete_conversation(db, session_id)
@@ -435,36 +450,47 @@ async def delete_conversation(session_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/conversations")
-async def list_conversations(db: Session = Depends(get_db)):
-    """获取所有对话会话列表"""
+async def list_conversations(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """获取用户的所有对话会话列表"""
     try:
-        conversations = conversation_service.list_conversations(db)
+        conversations = conversation_service.list_conversations(db, current_user.id)
         return {"conversations": conversations}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取会话列表失败: {str(e)}")
 
 
 @app.get("/conversations/search")
-async def search_conversations(q: str, db: Session = Depends(get_db)):
+async def search_conversations(
+    q: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
     """
-    搜索对话
+    搜索用户的对话
 
     Args:
         q: 搜索关键词
+        current_user: 当前登录用户
         db: 数据库会话
 
     Returns:
         包含关键词的对话列表
     """
     try:
-        results = conversation_service.search_conversations(db, q)
+        results = conversation_service.search_conversations(db, current_user.id, q)
         return {"results": results, "query": q, "count": len(results)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"搜索失败: {str(e)}")
 
 
 @app.get("/api/config")
-async def get_config(user_id: str, db: Session = Depends(get_db)):
+async def get_config(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
     """获取用户LLM配置"""
     from llm_service import llm_service
 
@@ -487,7 +513,7 @@ async def get_config(user_id: str, db: Session = Depends(get_db)):
     ]
 
     # 从数据库获取用户配置
-    user_config = db.query(UserConfig).filter_by(user_identifier=user_id).first()
+    user_config = db.query(UserConfig).filter_by(user_id=current_user.id).first()
 
     if user_config:
         # 返回数据库中的配置
@@ -525,7 +551,11 @@ async def get_config(user_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/config")
-async def update_config(config: ConfigUpdateRequest, db: Session = Depends(get_db)):
+async def update_config(
+    config: ConfigUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
     """更新用户LLM配置"""
     try:
         model_type = config.model_type
@@ -541,7 +571,7 @@ async def update_config(config: ConfigUpdateRequest, db: Session = Depends(get_d
                 raise HTTPException(status_code=400, detail="自定义模型需要提供URL和Model")
 
         # 查找或创建用户配置
-        user_config = db.query(UserConfig).filter_by(user_identifier=config.user_id).first()
+        user_config = db.query(UserConfig).filter_by(user_id=current_user.id).first()
 
         if user_config:
             # 更新现有配置
@@ -560,7 +590,7 @@ async def update_config(config: ConfigUpdateRequest, db: Session = Depends(get_d
         else:
             # 创建新配置
             user_config = UserConfig(
-                user_identifier=config.user_id,
+                user_id=current_user.id,
                 current_model_type=model_type,
                 max_tokens=max_tokens,
                 custom_api_url=config.llm_api_url or "",
