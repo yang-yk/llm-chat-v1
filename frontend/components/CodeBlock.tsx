@@ -137,22 +137,13 @@ export default function CodeBlock({ code, language, children }: CodeBlockProps) 
   useEffect(() => {
     // 只在代码视图时才启用检测
     if (viewMode !== 'code' || !buttonGroupRef.current) {
-      console.log('⚠️ Observer skipped:', { viewMode, hasButtonRef: !!buttonGroupRef.current });
       return;
     }
-
-    console.log('👀 Setting up IntersectionObserver on button group...');
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         // 当按钮组滚出视野时，显示浮动工具栏
         const shouldShow = !entry.isIntersecting;
-        console.log('🔍 Button intersection change:', {
-          isIntersecting: entry.isIntersecting,
-          shouldShow,
-          ratio: entry.intersectionRatio,
-          boundingRect: entry.boundingClientRect.top
-        });
         setShowFloatingToolbar(shouldShow);
       },
       {
@@ -162,10 +153,8 @@ export default function CodeBlock({ code, language, children }: CodeBlockProps) 
     );
 
     observer.observe(buttonGroupRef.current);
-    console.log('✅ Observer attached to button group');
 
     return () => {
-      console.log('🧹 Observer disconnected');
       observer.disconnect();
     };
   }, [viewMode]); // 依赖 viewMode，视图切换时重新检测
@@ -216,13 +205,6 @@ export default function CodeBlock({ code, language, children }: CodeBlockProps) 
 
   return (
     <div ref={containerRef} className="my-4 relative">
-      {/* 调试信息 */}
-      {viewMode === 'code' && (
-        <div className="text-xs text-gray-500 mb-1 font-mono">
-          🔍 Debug: showFloatingToolbar = {showFloatingToolbar ? '✅ TRUE' : '❌ FALSE'}
-        </div>
-      )}
-
       {/* 代码视图 */}
       {viewMode === 'code' && (
         <div ref={codeBlockRef} className="relative group/codeblock">
