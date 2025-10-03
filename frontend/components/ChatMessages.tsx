@@ -7,9 +7,10 @@ import ChatMessage from './ChatMessage';
 interface ChatMessagesProps {
   messages: Message[];
   isLoading: boolean;
+  onRegenerate?: () => void;
 }
 
-export default function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
+export default function ChatMessages({ messages, isLoading, onRegenerate }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -54,9 +55,17 @@ export default function ChatMessages({ messages, isLoading }: ChatMessagesProps)
 
   return (
     <div className="flex-1 overflow-y-auto">
-      {messages.map((message, index) => (
-        <ChatMessage key={index} message={message} />
-      ))}
+      {messages.map((message, index) => {
+        // 只给最后一条AI消息传递onRegenerate
+        const isLastAssistantMessage = message.role === 'assistant' && index === messages.length - 1;
+        return (
+          <ChatMessage
+            key={index}
+            message={message}
+            onRegenerate={isLastAssistantMessage ? onRegenerate : undefined}
+          />
+        );
+      })}
 
       {isLoading && (
         <div className="w-full flex justify-center px-3 sm:px-6 py-2 sm:py-3">

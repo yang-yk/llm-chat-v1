@@ -21,6 +21,7 @@ import {
   getConfig,
   updateConfig,
   searchConversations,
+  deleteFeedback,
 } from '@/lib/api';
 
 export default function Home() {
@@ -89,8 +90,20 @@ export default function Home() {
       const history = await getConversationHistory(sessionId);
       setMessages(history.messages);
       setCurrentSessionId(sessionId);
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载对话历史失败:', error);
+      const errorMessage = error.message || '未知错误';
+      alert(`加载对话历史失败：${errorMessage}`);
+
+      // 如果是认证错误，跳转到登录页
+      if (error.message?.includes('未登录') || error.message?.includes('过期')) {
+        router.push('/auth');
+      }
+
+      // 如果是权限或不存在错误，刷新对话列表
+      if (error.message?.includes('无权访问') || error.message?.includes('不存在')) {
+        await loadConversations();
+      }
     }
   };
 
@@ -194,6 +207,11 @@ export default function Home() {
 
       // 刷新对话列表以更新标题和消息数
       await loadConversations();
+
+      // 重新加载对话历史以获取消息ID（用于点赞点踩功能）
+      if (currentSessionId) {
+        await loadConversationHistory(currentSessionId);
+      }
     } catch (error) {
       // 如果是用户主动取消，不显示错误
       if ((error as Error).name === 'AbortError') {
@@ -202,6 +220,99 @@ export default function Home() {
         console.error('发送消息失败:', error);
 
         // 在聊天界面中显示错误消息，而不是用 alert
+        const errorMessage = (error as Error).message || '未知错误';
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          // 更新最后一条助手消息为错误提示
+          newMessages[newMessages.length - 1] = {
+            role: 'assistant',
+            content: `⚠️ **模型响应出错**\n\n抱歉，AI 模型在处理您的请求时遇到了问题。\n\n**错误信息：** ${errorMessage}\n\n**可能的原因：**\n- 模型服务暂时不可用\n- 网络连接问题\n- 请求超时\n\n**建议：**\n- 请稍后重试\n- 检查模型配置是否正确\n- 如问题持续，请联系管理员`,
+          };
+          return newMessages;
+        });
+      }
+    } finally {
+      setIsLoading(false);
+      setAbortController(null);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    // 如果正在生成或没有会话，禁止重新生成
+    if (isLoading || !currentSessionId) {
+      return;
+    }
+
+    // 找到最后一条用户消息
+    const lastUserMessageIndex = messages.findLastIndex(msg => msg.role === 'user');
+    if (lastUserMessageIndex === -1) {
+      return;
+    }
+
+    const lastUserMessage = messages[lastUserMessageIndex];
+
+    // 删除最后一条AI回复的反馈（如果存在）
+    const lastAssistantMessage = messages[messages.length - 1];
+    if (lastAssistantMessage.role === 'assistant' && lastAssistantMessage.id) {
+      try {
+        await deleteFeedback(lastAssistantMessage.id);
+      } catch (error) {
+        console.error('删除反馈失败:', error);
+        // 继续执行，不阻断重新生成流程
+      }
+    }
+
+    // 只删除最后一条AI回复（保留用户消息）
+    setMessages(messages.slice(0, lastUserMessageIndex + 1));
+    setIsLoading(true);
+
+    // 创建新的 AbortController
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    try {
+      let assistantContent = '';
+      const assistantMessage: Message = { role: 'assistant', content: '' };
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      // 使用流式响应
+      for await (const chunk of sendMessageStream({
+        user_id: userId,
+        session_id: currentSessionId,
+        message: lastUserMessage.content,
+        stream: true,
+      })) {
+        // 检查是否被取消
+        if (controller.signal.aborted) {
+          break;
+        }
+
+        assistantContent += chunk;
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          newMessages[newMessages.length - 1] = {
+            role: 'assistant',
+            content: assistantContent,
+          };
+          return newMessages;
+        });
+      }
+
+      // 刷新对话列表以更新标题和消息数
+      await loadConversations();
+
+      // 重新加载对话历史以获取消息ID（用于点赞点踩功能）
+      if (currentSessionId) {
+        await loadConversationHistory(currentSessionId);
+      }
+    } catch (error) {
+      // 如果是用户主动取消，不显示错误
+      if ((error as Error).name === 'AbortError') {
+        console.log('用户已停止生成');
+      } else {
+        console.error('重新生成失败:', error);
+
+        // 在聊天界面中显示错误消息
         const errorMessage = (error as Error).message || '未知错误';
         setMessages((prev) => {
           const newMessages = [...prev];
@@ -397,7 +508,7 @@ export default function Home() {
           </div>
         </header>
 
-        <ChatMessages messages={messages} isLoading={isLoading} />
+        <ChatMessages messages={messages} isLoading={isLoading} onRegenerate={handleRegenerate} />
         <MessageInput
           onSendMessage={handleSendMessage}
           onFocus={handleInputFocus}

@@ -87,7 +87,21 @@ export async function getConversationHistory(sessionId: string): Promise<Convers
     if (response.status === 401) {
       throw new Error('未登录或登录已过期');
     }
-    throw new Error('获取对话历史失败');
+    if (response.status === 403) {
+      throw new Error('无权访问此对话');
+    }
+    if (response.status === 404) {
+      throw new Error('对话不存在');
+    }
+    // 尝试获取详细错误信息
+    let errorDetail = '获取对话历史失败';
+    try {
+      const errorData = await response.json();
+      errorDetail = errorData.detail || errorDetail;
+    } catch (e) {
+      // 如果无法解析JSON，使用默认错误消息
+    }
+    throw new Error(errorDetail);
   }
 
   return response.json();
@@ -266,5 +280,52 @@ export function logout(): void {
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
     window.location.href = '/auth';
+  }
+}
+
+// 提交消息反馈
+export async function submitFeedback(messageId: number, feedbackType: 'like' | 'dislike'): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/feedback`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      message_id: messageId,
+      feedback_type: feedbackType,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('提交反馈失败');
+  }
+}
+
+// 获取消息反馈状态
+export async function getFeedback(messageId: number): Promise<{
+  message_id: number;
+  feedback_type: 'like' | 'dislike' | null;
+  has_feedback: boolean;
+}> {
+  const response = await fetch(`${API_BASE_URL}/api/feedback/${messageId}`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('获取反馈失败');
+  }
+
+  return response.json();
+}
+
+// 删除消息反馈
+export async function deleteFeedback(messageId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/feedback/${messageId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok && response.status !== 404) {
+    // 404表示反馈不存在，这是正常的
+    throw new Error('删除反馈失败');
   }
 }

@@ -13,7 +13,7 @@ from datetime import timedelta
 import os
 import json
 
-from database import get_db, init_db, UserConfig, User
+from database import get_db, init_db, UserConfig, User, MessageFeedback, Message, Conversation
 from conversation_service import conversation_service
 from config import HOST, PORT
 from auth import (
@@ -63,9 +63,15 @@ class ChatResponse(BaseModel):
     assistant_reply: str
 
 
+class MessageResponse(BaseModel):
+    id: int
+    role: str
+    content: str
+
+
 class ConversationHistoryResponse(BaseModel):
     session_id: str
-    messages: List[Dict[str, str]]
+    messages: List[MessageResponse]
 
 
 class ConfigResponse(BaseModel):
@@ -110,6 +116,11 @@ class UserResponse(BaseModel):
     email: Optional[str]
     is_active: bool
     created_at: str
+
+
+class FeedbackRequest(BaseModel):
+    message_id: int
+    feedback_type: str  # 'like' 或 'dislike'
 
 
 # 启动事件：初始化数据库
@@ -421,9 +432,16 @@ async def get_conversation_history(
 ):
     """获取对话历史"""
     try:
-        messages = conversation_service.get_conversation_history(db, session_id)
-        if not messages and not db.query(conversation_service.Conversation).filter_by(session_id=session_id).first():
+        # 验证对话是否属于当前用户
+        conversation = db.query(Conversation).filter_by(session_id=session_id).first()
+        if not conversation:
             raise HTTPException(status_code=404, detail=f"会话 {session_id} 不存在")
+
+        if conversation.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="无权访问此会话")
+
+        # 传递include_id=True以便前端可以获取message_id用于点赞点踩
+        messages = conversation_service.get_conversation_history(db, session_id, include_id=True)
 
         return ConversationHistoryResponse(
             session_id=session_id,
@@ -443,8 +461,18 @@ async def delete_conversation(
 ):
     """删除对话会话"""
     try:
+        # 验证对话是否属于当前用户
+        conversation = db.query(Conversation).filter_by(session_id=session_id).first()
+        if not conversation:
+            raise HTTPException(status_code=404, detail=f"会话 {session_id} 不存在")
+
+        if conversation.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="无权删除此会话")
+
         conversation_service.delete_conversation(db, session_id)
         return {"message": f"会话 {session_id} 已删除"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除会话失败: {str(e)}")
 
@@ -628,6 +656,113 @@ async def update_config(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"更新配置失败: {str(e)}")
+
+
+@app.post("/api/feedback")
+async def submit_feedback(
+    feedback: FeedbackRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """提交消息反馈（点赞/点踩）"""
+    try:
+        # 验证feedback_type
+        if feedback.feedback_type not in ['like', 'dislike']:
+            raise HTTPException(status_code=400, detail="feedback_type 必须是 'like' 或 'dislike'")
+
+        # 验证消息是否存在
+        message = db.query(Message).filter(Message.id == feedback.message_id).first()
+        if not message:
+            raise HTTPException(status_code=404, detail="消息不存在")
+
+        # 检查是否已经存在反馈
+        existing_feedback = db.query(MessageFeedback).filter(
+            MessageFeedback.message_id == feedback.message_id,
+            MessageFeedback.user_id == current_user.id
+        ).first()
+
+        if existing_feedback:
+            # 更新现有反馈
+            existing_feedback.feedback_type = feedback.feedback_type
+        else:
+            # 创建新反馈
+            new_feedback = MessageFeedback(
+                message_id=feedback.message_id,
+                user_id=current_user.id,
+                feedback_type=feedback.feedback_type
+            )
+            db.add(new_feedback)
+
+        db.commit()
+
+        return {
+            "message": "反馈已提交",
+            "feedback_type": feedback.feedback_type
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"提交反馈失败: {str(e)}")
+
+
+@app.get("/api/feedback/{message_id}")
+async def get_feedback(
+    message_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """获取消息的反馈状态"""
+    try:
+        feedback = db.query(MessageFeedback).filter(
+            MessageFeedback.message_id == message_id,
+            MessageFeedback.user_id == current_user.id
+        ).first()
+
+        if feedback:
+            return {
+                "message_id": message_id,
+                "feedback_type": feedback.feedback_type,
+                "has_feedback": True
+            }
+        else:
+            return {
+                "message_id": message_id,
+                "feedback_type": None,
+                "has_feedback": False
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取反馈失败: {str(e)}")
+
+
+@app.delete("/api/feedback/{message_id}")
+async def delete_feedback(
+    message_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """删除消息的反馈"""
+    try:
+        feedback = db.query(MessageFeedback).filter(
+            MessageFeedback.message_id == message_id,
+            MessageFeedback.user_id == current_user.id
+        ).first()
+
+        if not feedback:
+            raise HTTPException(status_code=404, detail="未找到反馈记录")
+
+        db.delete(feedback)
+        db.commit()
+
+        return {"message": "反馈已删除"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"删除反馈失败: {str(e)}")
 
 
 # 主程序入口

@@ -85,6 +85,21 @@ class UserConfig(Base):
     user = relationship("User", back_populates="config")
 
 
+class MessageFeedback(Base):
+    """消息反馈表"""
+    __tablename__ = "message_feedbacks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message_id = Column(Integer, ForeignKey("messages.id"), nullable=False)  # 消息ID
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # 用户ID
+    feedback_type = Column(String(20), nullable=False)  # 'like' 或 'dislike'
+    created_at = Column(DateTime, default=get_beijing_time)
+
+    # 关联消息和用户
+    message = relationship("Message")
+    user = relationship("User")
+
+
 # 创建数据库引擎
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
 

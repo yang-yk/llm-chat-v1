@@ -1,5 +1,6 @@
 // API类型定义
 export interface Message {
+  id?: number;
   role: 'user' | 'assistant';
   content: string;
 }

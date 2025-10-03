@@ -35,23 +35,28 @@ class ConversationService:
         return session_id
 
     @staticmethod
-    def get_conversation_history(db: Session, session_id: str) -> List[Dict[str, str]]:
+    def get_conversation_history(db: Session, session_id: str, include_id: bool = False) -> List[Dict]:
         """
         获取对话历史记录
 
         Args:
             db: 数据库会话
             session_id: 会话ID
+            include_id: 是否包含message_id（用于前端显示）
 
         Returns:
-            消息列表，格式为 [{"role": "user", "content": "..."}]
+            消息列表，格式为 [{"role": "user", "content": "..."}] 或 [{"id": 1, "role": "user", "content": "..."}]
         """
         conversation = db.query(Conversation).filter(Conversation.session_id == session_id).first()
         if not conversation:
             return []
 
         messages = db.query(Message).filter(Message.conversation_id == conversation.id).order_by(Message.created_at).all()
-        return [{"role": msg.role, "content": msg.content} for msg in messages]
+
+        if include_id:
+            return [{"id": msg.id, "role": msg.role, "content": msg.content} for msg in messages]
+        else:
+            return [{"role": msg.role, "content": msg.content} for msg in messages]
 
     @staticmethod
     def save_message(db: Session, session_id: str, role: str, content: str):
