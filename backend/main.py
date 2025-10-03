@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from datetime import timedelta
 import os
@@ -101,7 +101,7 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
-    user: Dict[str, any]
+    user: Dict[str, Any]
 
 
 class UserResponse(BaseModel):
@@ -135,12 +135,12 @@ PRESET_MODELS = {
     }
 }
 
-# 当前模型类型（默认使用codegeex）
-current_model_type = "codegeex"
+# 当前模型类型（默认使用glm）
+current_model_type = "glm"
 
 # 全局配置
 global_config = {
-    "max_tokens": 2000  # 默认最大token数
+    "max_tokens": 8000  # 默认最大token数
 }
 
 # 自定义模型配置存储
@@ -210,8 +210,8 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     # 为新用户创建默认配置
     user_config = UserConfig(
         user_id=new_user.id,
-        current_model_type="codegeex",
-        max_tokens=2000
+        current_model_type="glm",
+        max_tokens=8000
     )
     db.add(user_config)
     db.commit()
@@ -219,7 +219,7 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     # 生成访问令牌
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": new_user.id}, expires_delta=access_token_expires
+        data={"sub": str(new_user.id)}, expires_delta=access_token_expires
     )
 
     return {
@@ -253,7 +253,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     # 生成访问令牌
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.id}, expires_delta=access_token_expires
+        data={"sub": str(user.id)}, expires_delta=access_token_expires
     )
 
     return {
@@ -559,7 +559,7 @@ async def update_config(
     """更新用户LLM配置"""
     try:
         model_type = config.model_type
-        max_tokens = config.max_tokens if config.max_tokens else 2000
+        max_tokens = config.max_tokens if config.max_tokens else 8000
 
         # 验证 max_tokens
         if max_tokens < 1 or max_tokens > 100000:

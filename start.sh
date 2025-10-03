@@ -97,6 +97,25 @@ install_frontend_deps() {
     fi
 }
 
+# 检查数据库权限
+check_database() {
+    echo -e "${YELLOW}🗄️  检查数据库权限...${NC}"
+
+    # 检查根目录的 conversation.db
+    if [ -f "$PROJECT_ROOT/conversation.db" ]; then
+        if [ ! -w "$PROJECT_ROOT/conversation.db" ]; then
+            echo -e "${YELLOW}⚠️  修复数据库文件权限...${NC}"
+            chmod 664 "$PROJECT_ROOT/conversation.db" 2>/dev/null || true
+        fi
+        echo -e "${GREEN}✅ 数据库权限正常${NC}"
+    fi
+
+    # 确保项目根目录可写
+    if [ ! -w "$PROJECT_ROOT" ]; then
+        echo -e "${RED}❌ 项目根目录不可写，可能影响数据库创建${NC}"
+    fi
+}
+
 # 启动后端
 start_backend() {
     echo -e "${YELLOW}🚀 启动后端服务...${NC}"
@@ -106,11 +125,17 @@ start_backend() {
     if lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null 2>&1; then
         echo -e "${YELLOW}⚠️  端口8000已被占用，尝试关闭现有进程...${NC}"
         lsof -ti:8000 | xargs kill -9 2>/dev/null || true
-        sleep 1
+        sleep 2
     fi
 
-    # 启动后端
-    nohup python3 main.py > "$BACKEND_LOG" 2>&1 &
+    # 检查uvicorn是否可用
+    if ! python3 -c "import uvicorn" &> /dev/null; then
+        echo -e "${RED}❌ uvicorn未安装，请运行: pip install -r requirements.txt${NC}"
+        exit 1
+    fi
+
+    # 启动后端（使用uvicorn）
+    nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 > "$BACKEND_LOG" 2>&1 &
     BACKEND_PID=$!
     echo $BACKEND_PID > "$BACKEND_PID_FILE"
 
@@ -130,6 +155,7 @@ start_backend() {
     done
 
     echo -e "${RED}❌ 后端服务启动超时，请查看日志: $BACKEND_LOG${NC}"
+    tail -20 "$BACKEND_LOG"
     return 1
 }
 
@@ -180,6 +206,11 @@ main() {
     install_backend_deps
     echo ""
     install_frontend_deps
+
+    echo ""
+
+    # 检查数据库
+    check_database
 
     echo ""
     echo -e "${BLUE}================================================${NC}"

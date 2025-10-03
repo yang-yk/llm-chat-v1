@@ -70,8 +70,8 @@ class UserConfig(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)  # 用户ID
-    current_model_type = Column(String(50), default="codegeex", nullable=False)  # 当前模型类型: codegeex/glm/custom
-    max_tokens = Column(Integer, default=2000, nullable=False)  # 最大token数
+    current_model_type = Column(String(50), default="glm", nullable=False)  # 当前模型类型: codegeex/glm/custom
+    max_tokens = Column(Integer, default=8000, nullable=False)  # 最大token数
 
     # 自定义模型配置(JSON格式存储)
     custom_api_url = Column(String(500), default="")
