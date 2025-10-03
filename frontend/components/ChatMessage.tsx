@@ -46,7 +46,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
       <div className="w-full max-w-5xl">
         <div className={`flex gap-4 sm:gap-6 items-start ${isUser ? 'flex-row-reverse' : ''}`}>
           {/* 头像 */}
-          <div className="flex-shrink-0">
+          <div className={`flex-shrink-0 ${isUser ? 'mt-1.5 sm:mt-2' : '-mt-1'}`}>
             {isUser ? (
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-md">
                 <svg className="w-5 h-5 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -63,7 +63,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
           </div>
 
           {/* 消息内容 */}
-          <div className="flex flex-col min-w-0 max-w-[90%] group relative">
+          <div className={`flex flex-col min-w-0 group relative ${isUser ? 'max-w-[90%]' : 'w-full'}`}>
             {/* 消息气泡 */}
             <div className={`${isUser ? 'rounded-2xl px-4 py-3 sm:px-5 sm:py-3.5 bg-white border border-slate-200/70 shadow-sm inline-block' : 'w-full'}`}>
               {isUser ? (
@@ -102,11 +102,11 @@ export default function ChatMessage({ message }: ChatMessageProps) {
                       const codeId = `code-${message.content.length}-${codeBlockCounter.current}`;
 
                       return (
-                        <div className="relative group w-full">
-                          <pre className="rounded-lg pt-12 pb-4 px-4 my-3 overflow-x-auto bg-gray-50 shadow-sm border border-gray-300 w-full block" {...props}>
+                        <div className="relative group w-full max-w-full">
+                          <pre className="rounded-lg pt-12 pb-4 px-4 my-3 overflow-x-auto bg-gray-50 shadow-sm border border-gray-300 w-full max-w-full block" {...props}>
                             {children}
                           </pre>
-                          {/* 固定在代码块内部的复制按钮 */}
+                          {/* 固定在代码块内部的复制按钮（右上角） */}
                           <button
                             onClick={() => handleCopyCode(codeContent, codeId)}
                             className="absolute top-2 right-2 px-2.5 py-1.5 bg-white hover:bg-gray-100 text-gray-600 hover:text-gray-900 rounded-md text-xs border border-gray-300 shadow-sm flex items-center gap-1.5 z-10"
@@ -118,6 +118,28 @@ export default function ChatMessage({ message }: ChatMessageProps) {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
                                 <span className="text-green-600">已复制</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                <span>复制</span>
+                              </>
+                            )}
+                          </button>
+                          {/* 固定在视口的复制按钮（右下角，代码块滚动时可见，hover时显示） */}
+                          <button
+                            onClick={() => handleCopyCode(codeContent, codeId)}
+                            className="sticky bottom-2 float-right mr-2 mb-2 px-2.5 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 hover:text-blue-900 rounded-md text-xs shadow-md items-center gap-1.5 z-10 transition-all opacity-0 group-hover:opacity-100 group-hover:flex hidden group-hover:inline-flex"
+                            title="复制代码"
+                          >
+                            {copiedCode === codeId ? (
+                              <>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span>已复制</span>
                               </>
                             ) : (
                               <>

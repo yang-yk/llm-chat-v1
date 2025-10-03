@@ -5,10 +5,12 @@ import { useState, useRef, KeyboardEvent } from 'react';
 interface MessageInputProps {
   onSendMessage: (message: string) => void;
   onFocus?: () => void;
+  onStopGeneration?: () => void;
   disabled?: boolean;
+  isGenerating?: boolean;
 }
 
-export default function MessageInput({ onSendMessage, onFocus, disabled = false }: MessageInputProps) {
+export default function MessageInput({ onSendMessage, onFocus, onStopGeneration, disabled = false, isGenerating = false }: MessageInputProps) {
   const [message, setMessage] = useState('');
   const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -74,18 +76,32 @@ export default function MessageInput({ onSendMessage, onFocus, disabled = false 
               overflowWrap: 'break-word'
             }}
           />
-          <button
-            onClick={handleSend}
-            disabled={!message.trim() || disabled}
-            className="px-3 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl hover:from-blue-500 hover:to-blue-600 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 sm:gap-2 shadow-md hover:shadow-lg transform hover:scale-[1.02] disabled:transform-none flex-shrink-0"
-            style={{ minWidth: '68px', height: '44px' }}
-            title="发送消息"
-          >
-            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
-            <span className="font-medium text-sm sm:text-base hidden xs:inline">发送</span>
-          </button>
+          {isGenerating ? (
+            <button
+              onClick={onStopGeneration}
+              className="px-3 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl hover:from-blue-500 hover:to-blue-600 transition-all flex items-center justify-center gap-1.5 sm:gap-2 shadow-md hover:shadow-lg transform hover:scale-[1.02] flex-shrink-0"
+              style={{ minWidth: '68px', height: '44px' }}
+              title="停止生成"
+            >
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              <span className="font-medium text-sm sm:text-base hidden xs:inline">停止</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!message.trim() || disabled}
+              className="px-3 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl hover:from-blue-500 hover:to-blue-600 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 sm:gap-2 shadow-md hover:shadow-lg transform hover:scale-[1.02] disabled:transform-none flex-shrink-0"
+              style={{ minWidth: '68px', height: '44px' }}
+              title="发送消息"
+            >
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+              <span className="font-medium text-sm sm:text-base hidden xs:inline">发送</span>
+            </button>
+          )}
         </div>
         <div className="mt-2 text-xs text-gray-500 flex items-center gap-2">
           <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">

@@ -26,6 +26,7 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [config, setConfig] = useState<ConfigResponse | null>(null);
   const [userId, setUserId] = useState('');
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   useEffect(() => {
     // 初始化用户ID
@@ -114,6 +115,10 @@ export default function Home() {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
+    // 创建新的 AbortController
+    const controller = new AbortController();
+    setAbortController(controller);
+
     try {
       let assistantContent = '';
       const assistantMessage: Message = { role: 'assistant', content: '' };
@@ -126,6 +131,11 @@ export default function Home() {
         message,
         stream: true,
       })) {
+        // 检查是否被取消
+        if (controller.signal.aborted) {
+          break;
+        }
+
         assistantContent += chunk;
         setMessages((prev) => {
           const newMessages = [...prev];
@@ -140,11 +150,25 @@ export default function Home() {
       // 刷新对话列表以更新标题和消息数
       await loadConversations();
     } catch (error) {
-      console.error('发送消息失败:', error);
-      alert('发送消息失败: ' + (error as Error).message);
-      // 移除失败的助手消息
-      setMessages((prev) => prev.slice(0, -1));
+      // 如果是用户主动取消，不显示错误
+      if ((error as Error).name === 'AbortError') {
+        console.log('用户已停止生成');
+      } else {
+        console.error('发送消息失败:', error);
+        alert('发送消息失败: ' + (error as Error).message);
+        // 移除失败的助手消息
+        setMessages((prev) => prev.slice(0, -1));
+      }
     } finally {
+      setIsLoading(false);
+      setAbortController(null);
+    }
+  };
+
+  const handleStopGeneration = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
       setIsLoading(false);
     }
   };
@@ -248,7 +272,9 @@ export default function Home() {
         <MessageInput
           onSendMessage={handleSendMessage}
           onFocus={handleInputFocus}
+          onStopGeneration={handleStopGeneration}
           disabled={isLoading}
+          isGenerating={isLoading}
         />
       </main>
 
