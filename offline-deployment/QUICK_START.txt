@@ -1,0 +1,151 @@
+==========================================
+  LLM Chat 离线部署快速开始
+==========================================
+
+最快 3 步完成部署！
+
+前提条件：
+---------
+✓ 目标服务器已安装 Docker
+  (未安装？参考下方 "Docker 安装")
+
+步骤 1: 传输文件
+---------------
+将整个 offline-deployment 目录复制到目标服务器
+
+方法 A - 使用 U 盘/移动硬盘:
+  1. 将目录复制到 U 盘
+  2. 在目标服务器插入 U 盘
+  3. 复制到服务器: cp -r /media/usb/offline-deployment /opt/
+
+方法 B - 使用 SCP (如有临时网络):
+  scp -r offline-deployment/ user@target-server:/opt/
+
+步骤 2: 运行部署脚本
+-------------------
+cd /opt/offline-deployment
+sudo ./offline-deploy.sh
+
+步骤 3: 按提示配置
+-----------------
+脚本会询问:
+- 服务器 IP 地址 (例如: 192.168.1.100)
+- 模型 API 配置 (可直接回车使用默认值)
+- 管理员账号设置 (可直接回车使用默认值)
+
+完成！
+-----
+访问应用:
+  前端: http://YOUR_IP:3000
+  后端: http://YOUR_IP:8000/docs
+  管理: http://YOUR_IP:3000/admin
+
+默认管理员账号:
+  用户名: admin
+  密码: Admin@2025
+
+==========================================
+
+Docker 安装 (如未安装)
+==========================================
+
+方法 1: 使用安装脚本 (推荐)
+--------------------------
+1. 下载 Docker 离线包 (在有网络的机器上):
+
+   x86_64 架构:
+   wget https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz
+
+   ARM64 架构:
+   wget https://download.docker.com/linux/static/stable/aarch64/docker-24.0.7.tgz
+
+2. 将 docker-*.tgz 复制到 offline-deployment 目录
+
+3. 运行安装脚本:
+   cd offline-deployment
+   sudo ./install-docker-offline.sh
+
+4. 验证安装:
+   docker --version
+   docker info
+
+方法 2: 查看详细文档
+-------------------
+参考 OFFLINE_DEPLOYMENT_GUIDE.md 中的
+"Docker 离线安装" 章节
+
+==========================================
+
+常见问题
+==========================================
+
+Q: 部署脚本执行失败怎么办?
+A:
+1. 确保有 sudo 权限
+2. 检查磁盘空间 (至少 10GB): df -h
+3. 查看详细日志找到错误原因
+4. 参考 OFFLINE_DEPLOYMENT_GUIDE.md
+
+Q: 容器启动失败?
+A:
+1. 检查端口是否被占用:
+   sudo netstat -tlnp | grep -E ':(3000|8000)'
+2. 查看容器日志:
+   docker compose logs
+
+Q: 前端无法访问后端?
+A:
+1. 检查 frontend/.env.local 中的 IP 地址
+2. 确保使用服务器的实际 IP，不是 127.0.0.1
+3. 重新构建前端: docker compose up -d --build frontend
+
+Q: 模型没有响应?
+A:
+1. 检查模型服务是否运行
+2. 查看 docker-compose.yml 中的模型配置
+3. 查看后端日志: docker compose logs backend
+
+==========================================
+
+文件说明
+==========================================
+
+llm-chat-images.tar
+  Docker 镜像文件 (约 1.8GB)
+
+project-source.tar.gz
+  项目源代码 (约 130KB)
+
+offline-deploy.sh
+  自动化部署脚本 (推荐使用)
+
+install-docker-offline.sh
+  Docker 离线安装脚本
+
+OFFLINE_DEPLOYMENT_GUIDE.md
+  完整部署文档 (包含手动部署步骤)
+
+README.txt
+  简要说明
+
+QUICK_START.txt
+  本文件
+
+==========================================
+
+获取帮助
+==========================================
+
+详细文档:
+  查看 OFFLINE_DEPLOYMENT_GUIDE.md
+
+问题排查:
+  文档中的 "常见问题" 章节
+
+日志查看:
+  docker compose logs -f
+
+服务状态:
+  docker compose ps
+
+==========================================

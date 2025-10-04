@@ -67,3 +67,8 @@ stop-services.sh
 restart-services.sh
 status-services.sh
 *.pid
+
+# Offline deployment - large binary files
+offline-deployment/*.tar
+offline-deployment/*.tgz
+offline-deployment/docker-*.tgz
