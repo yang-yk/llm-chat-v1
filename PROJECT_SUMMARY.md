@@ -251,9 +251,10 @@ npm run dev
 
 **后端 (backend/.env)**:
 ```bash
-LLM_API_URL=http://111.19.168.151:11551/v1/chat/completions
-LLM_MODEL=codegeex4-all-9b
-LLM_API_KEY=codegeex
+# 默认使用 GLM-4
+LLM_API_URL=http://111.19.168.151:11553/v1/chat/completions
+LLM_MODEL=glm4_32B_chat
+LLM_API_KEY=glm432b
 DATABASE_URL=sqlite:///./conversation.db
 SECRET_KEY=your-secret-key-change-this-in-production
 ALGORITHM=HS256

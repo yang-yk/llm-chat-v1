@@ -1,0 +1,19 @@
+[Unit]
+Description=LLM Chat System Backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/path/to/llm-chat-system/backend
+Environment="PATH=/usr/bin:/usr/local/bin"
+ExecStart=/usr/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+
+# 日志配置
+StandardOutput=append:/path/to/llm-chat-system/logs/backend.log
+StandardError=append:/path/to/llm-chat-system/logs/backend-error.log
+
+[Install]
+WantedBy=multi-user.target
