@@ -13,22 +13,27 @@
 
 | 文件 | 说明 | 行数 |
 |------|------|------|
-| main.py | FastAPI主应用和所有API路由 | ~420 |
+| main.py | FastAPI主应用和所有API路由 | ~760 |
+| auth.py | JWT认证和用户管理 | ~150 |
 | config.py | 配置管理 | ~17 |
-| database.py | 数据库模型（SQLAlchemy ORM） | ~78 |
+| database.py | 数据库模型（用户、对话、消息、反馈） | ~122 |
 | llm_service.py | LLM API调用服务 | ~133 |
-| conversation_service.py | 对话管理业务逻辑 | ~260 |
+| conversation_service.py | 对话管理业务逻辑 | ~340 |
 | requirements.txt | Python依赖包 | - |
 | .env.example | 环境变量示例 | - |
 | README.md | 后端详细文档 | - |
 
 **后端功能**:
+- ✅ 用户认证系统（注册、登录、JWT）
 - ✅ 对话创建、查询、删除
 - ✅ 消息发送（流式/非流式）
 - ✅ 对话历史管理
+- ✅ 对话搜索功能
+- ✅ 消息反馈系统（点赞/点踩）
 - ✅ 模型配置管理
 - ✅ 自动标题生成
 - ✅ 用户配置持久化
+- ✅ 用户数据隔离
 - ✅ 自动清理旧对话
 
 ### 2. 前端应用 (frontend/)
@@ -43,11 +48,15 @@
 #### React组件
 | 文件 | 说明 | 行数 |
 |------|------|------|
-| components/Sidebar.tsx | 侧边栏（对话列表） | ~100 |
-| components/ChatMessages.tsx | 消息列表 | ~50 |
-| components/ChatMessage.tsx | 单条消息渲染 | ~60 |
-| components/MessageInput.tsx | 消息输入框 | ~60 |
-| components/SettingsModal.tsx | 设置模态框 | ~150 |
+| app/auth/page.tsx | 登录/注册页面 | ~280 |
+| components/Sidebar.tsx | 侧边栏（对话列表、搜索） | ~180 |
+| components/ChatMessages.tsx | 消息列表 | ~100 |
+| components/ChatMessage.tsx | 单条消息（点赞点踩、重新生成） | ~280 |
+| components/MessageInput.tsx | 消息输入框（停止生成） | ~120 |
+| components/SettingsModal.tsx | 设置模态框 | ~240 |
+| components/CodeBlock.tsx | 代码块（HTML预览、下载） | ~300 |
+| components/HtmlPreview.tsx | HTML预览组件 | ~150 |
+| components/ExportMenu.tsx | 导出菜单 | ~180 |
 
 #### 工具库
 | 文件 | 说明 | 行数 |
@@ -66,11 +75,17 @@
 - README.md - 前端详细文档
 
 **前端功能**:
+- ✅ 用户认证界面（登录/注册）
 - ✅ 现代化UI设计
 - ✅ 实时流式响应
 - ✅ 对话管理界面
+- ✅ 对话搜索功能
+- ✅ 消息反馈（点赞/点踩）
+- ✅ 重新生成消息
 - ✅ 模型配置面板
 - ✅ 代码语法高亮
+- ✅ HTML代码预览
+- ✅ 对话导出（Markdown/PDF/TXT）
 - ✅ 响应式布局
 - ✅ TypeScript类型安全
 
@@ -106,15 +121,15 @@
 - **文档文件**: 6个
 
 ### 代码统计
-- **后端代码**: ~900行 Python
-- **前端代码**: ~900行 TypeScript/TSX
-- **总代码量**: ~4300行（包含配置和文档）
+- **后端代码**: ~1500行 Python
+- **前端代码**: ~2500行 TypeScript/TSX
+- **总代码量**: ~6000行（包含配置和文档）
 
 ### 组件统计
-- **React组件**: 5个
-- **API端点**: 8个
-- **数据库模型**: 3个
-- **类型定义**: 10+个
+- **React组件**: 9个
+- **API端点**: 18个
+- **数据库模型**: 5个（User、Conversation、Message、UserConfig、MessageFeedback）
+- **类型定义**: 15+个
 
 ## 🚀 快速启动
 
@@ -149,33 +164,52 @@ npm run dev
 
 ### 已实现（100%）
 
-1. **对话管理**
+1. **用户认证**
+   - ✅ 用户注册
+   - ✅ 用户登录
+   - ✅ JWT身份验证
+   - ✅ 密码加密存储
+   - ✅ 自动保持登录
+   - ✅ 用户数据隔离
+
+2. **对话管理**
    - ✅ 创建新对话
    - ✅ 查看对话列表
    - ✅ 切换对话
    - ✅ 删除对话
+   - ✅ 搜索对话
    - ✅ 自动生成标题
 
-2. **消息交互**
+3. **消息交互**
    - ✅ 发送消息
    - ✅ 接收回复
    - ✅ 流式响应（实时显示）
+   - ✅ 停止生成
+   - ✅ 重新生成
    - ✅ 代码语法高亮
+   - ✅ HTML代码预览
    - ✅ 多轮对话上下文
 
-3. **模型配置**
+4. **消息反馈**
+   - ✅ 点赞/点踩
+   - ✅ 反馈状态显示
+   - ✅ 取消反馈
+   - ✅ 反馈持久化
+
+5. **模型配置**
    - ✅ CodeGeex 4 预设
    - ✅ GLM-4 32B 预设
    - ✅ 自定义模型配置
    - ✅ Max Tokens 调节
    - ✅ 用户配置持久化
 
-4. **用户体验**
+6. **用户体验**
    - ✅ 响应式设计
    - ✅ 侧边栏折叠
    - ✅ 快捷键支持
    - ✅ 加载动画
    - ✅ 错误提示
+   - ✅ 对话导出
 
 ## 🎯 技术亮点
 
@@ -221,6 +255,9 @@ LLM_API_URL=http://111.19.168.151:11551/v1/chat/completions
 LLM_MODEL=codegeex4-all-9b
 LLM_API_KEY=codegeex
 DATABASE_URL=sqlite:///./conversation.db
+SECRET_KEY=your-secret-key-change-this-in-production
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=10080
 HOST=0.0.0.0
 PORT=8000
 ```
@@ -278,14 +315,21 @@ npm start
 ### Docker部署
 可以使用docker-compose一键部署前后端服务。
 
-## 🔒 安全建议
+## 🔒 安全特性
 
+已实现：
+- ✅ JWT身份认证
+- ✅ 密码加密存储（bcrypt）
+- ✅ 用户数据隔离
+- ✅ Token过期机制
+- ✅ 环境变量存储敏感信息
+- ✅ 所有API端点认证保护
+
+待实现：
 - [ ] 配置具体的CORS域名
-- [ ] 添加用户认证系统
 - [ ] 实现API限流
 - [ ] 使用HTTPS
 - [ ] 定期备份数据库
-- [ ] 环境变量存储敏感信息
 - [ ] 日志脱敏处理
 
 ## 🔮 未来扩展
@@ -322,8 +366,8 @@ npm start
 
 ## ✅ 项目状态
 
-- 状态: **✅ 完成**
-- 版本: **v1.0.0**
+- 状态: **✅ 完成并持续更新**
+- 版本: **v1.5.0**
 - 完成度: **100%**
 
 ## 📧 支持
