@@ -63,14 +63,11 @@ export default function AuthPage() {
           throw new Error(data.detail || '注册失败');
         }
 
-        const data = await response.json();
-
-        // 保存token和用户信息
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-
-        // 跳转到主页
-        router.push('/');
+        // 注册成功，显示提示并切换到登录模式
+        alert('注册成功！请使用新账号登录。');
+        setIsLogin(true);
+        setPassword(''); // 清空密码框
+        setError(''); // 清空错误信息
       }
     } catch (err: any) {
       setError(err.message || '操作失败，请重试');

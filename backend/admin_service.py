@@ -12,8 +12,27 @@ def get_all_users_with_stats(db: Session) -> List[Dict[str, Any]]:
     """获取所有用户及其使用统计"""
     users = db.query(User).all()
 
-    result = []
+    # 分离 admin 用户和其他用户
+    admin_user = None
+    other_users = []
+
     for user in users:
+        if user.username == "admin":
+            admin_user = user
+        else:
+            other_users.append(user)
+
+    # 其他用户按用户名首字母排序
+    other_users.sort(key=lambda u: u.username.lower())
+
+    # admin 用户放在最前面
+    sorted_users = []
+    if admin_user:
+        sorted_users.append(admin_user)
+    sorted_users.extend(other_users)
+
+    result = []
+    for user in sorted_users:
         # 统计对话数
         conversation_count = db.query(func.count(Conversation.id)).filter(
             Conversation.user_id == user.id
@@ -200,6 +219,10 @@ def toggle_user_status(db: Session, user_id: int) -> Dict[str, Any]:
     if not user:
         return None
 
+    # admin 用户无法被禁用
+    if user.username == "admin":
+        raise ValueError("admin 用户无法被禁用")
+
     user.is_active = not user.is_active
     db.commit()
     db.refresh(user)
@@ -216,6 +239,10 @@ def set_user_admin(db: Session, user_id: int, is_admin: bool) -> Dict[str, Any]:
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return None
+
+    # admin 用户的管理员权限无法被取消
+    if user.username == "admin" and not is_admin:
+        raise ValueError("admin 用户的管理员权限无法被取消")
 
     user.is_admin = is_admin
     db.commit()

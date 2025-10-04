@@ -391,18 +391,22 @@ export default function AdminPage() {
                       >
                         详情
                       </button>
-                      <button
-                        onClick={() => handleToggleUserStatus(user.id)}
-                        className="text-yellow-600 hover:text-yellow-900"
-                      >
-                        {user.is_active ? '禁用' : '启用'}
-                      </button>
-                      <button
-                        onClick={() => handleSetAdmin(user.id, !user.is_admin)}
-                        className="text-purple-600 hover:text-purple-900"
-                      >
-                        {user.is_admin ? '取消管理员' : '设为管理员'}
-                      </button>
+                      {user.username !== 'admin' && (
+                        <>
+                          <button
+                            onClick={() => handleToggleUserStatus(user.id)}
+                            className="text-yellow-600 hover:text-yellow-900"
+                          >
+                            {user.is_active ? '禁用' : '启用'}
+                          </button>
+                          <button
+                            onClick={() => handleSetAdmin(user.id, !user.is_admin)}
+                            className="text-purple-600 hover:text-purple-900"
+                          >
+                            {user.is_admin ? '取消管理员' : '设为管理员'}
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}

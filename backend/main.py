@@ -144,13 +144,13 @@ async def startup_event():
 PRESET_MODELS = {
     "codegeex": {
         "name": "CodeGeex",
-        "url": "http://111.19.168.151:11551/v1/chat/completions",
+        "url": "http://127.0.0.1:11551/v1/chat/completions",
         "model": "codegeex4-all-9b",
         "key": "codegeex"
     },
     "glm": {
         "name": "GLM-4",
-        "url": "http://111.19.168.151:11553/v1/chat/completions",
+        "url": "http://127.0.0.1:11553/v1/chat/completions",
         "model": "glm4_32B_chat",
         "key": "glm432b"
     }

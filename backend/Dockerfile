@@ -18,8 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制应用代码
 COPY . .
 
-# 创建日志目录
-RUN mkdir -p logs
+# 创建日志和数据库目录
+RUN mkdir -p logs db && chmod 777 db
 
 # 暴露端口
 EXPOSE 8000

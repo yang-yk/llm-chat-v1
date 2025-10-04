@@ -31,10 +31,14 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# 检查 docker-compose 是否安装
-if ! command -v docker-compose &> /dev/null; then
-    echo -e "${RED}错误: 未检测到 docker-compose${NC}"
-    echo "请先安装 docker-compose: https://docs.docker.com/compose/install/"
+# 检查 docker-compose 是否安装（兼容 V1 和 V2）
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+elif docker compose version &> /dev/null; then
+    DOCKER_COMPOSE="docker compose"
+else
+    echo -e "${RED}错误: 未检测到 docker-compose 或 docker compose${NC}"
+    echo "请先安装 Docker Compose: https://docs.docker.com/compose/install/"
     exit 1
 fi
 
@@ -208,12 +212,12 @@ echo -e "${GREEN}✓ 配置文件已创建${NC}"
 # 构建 Docker 镜像
 echo ""
 echo -e "${BLUE}[5/8] 构建 Docker 镜像...${NC}"
-docker-compose build
+$DOCKER_COMPOSE build
 
 # 启动容器
 echo ""
 echo -e "${BLUE}[6/8] 启动 Docker 容器...${NC}"
-docker-compose up -d
+$DOCKER_COMPOSE up -d
 
 # 等待服务启动
 echo ""
@@ -223,7 +227,7 @@ sleep 5
 # 检查服务状态
 echo ""
 echo -e "${BLUE}[8/8] 检查服务状态...${NC}"
-docker-compose ps
+$DOCKER_COMPOSE ps
 
 # 创建管理脚本
 echo ""
@@ -233,16 +237,16 @@ echo -e "${GREEN}创建 Docker 管理脚本...${NC}"
 cat > docker-start.sh <<'EOF'
 #!/bin/bash
 echo "启动 LLM Chat System (Docker)..."
-docker-compose up -d
+docker compose up -d
 echo "服务已启动"
-docker-compose ps
+docker compose ps
 EOF
 
 # Docker 停止脚本
 cat > docker-stop.sh <<'EOF'
 #!/bin/bash
 echo "停止 LLM Chat System (Docker)..."
-docker-compose down
+docker compose down
 echo "服务已停止"
 EOF
 
@@ -250,9 +254,9 @@ EOF
 cat > docker-restart.sh <<'EOF'
 #!/bin/bash
 echo "重启 LLM Chat System (Docker)..."
-docker-compose restart
+docker compose restart
 echo "服务已重启"
-docker-compose ps
+docker compose ps
 EOF
 
 # Docker 状态脚本
@@ -260,10 +264,10 @@ cat > docker-status.sh <<'EOF'
 #!/bin/bash
 echo "LLM Chat System 服务状态 (Docker):"
 echo "========================================="
-docker-compose ps
+docker compose ps
 echo ""
 echo "容器资源占用:"
-docker stats --no-stream $(docker-compose ps -q)
+docker stats --no-stream $(docker compose ps -q)
 EOF
 
 # Docker 日志脚本
@@ -271,10 +275,10 @@ cat > docker-logs.sh <<'EOF'
 #!/bin/bash
 if [ -z "$1" ]; then
     echo "查看所有服务日志..."
-    docker-compose logs -f
+    docker compose logs -f
 else
     echo "查看 $1 服务日志..."
-    docker-compose logs -f $1
+    docker compose logs -f $1
 fi
 EOF
 
@@ -302,22 +306,22 @@ fi
 
 echo ""
 echo "Docker 管理命令:"
-echo "  启动服务: ${BLUE}./docker-start.sh${NC} 或 ${BLUE}docker-compose up -d${NC}"
-echo "  停止服务: ${BLUE}./docker-stop.sh${NC} 或 ${BLUE}docker-compose down${NC}"
-echo "  重启服务: ${BLUE}./docker-restart.sh${NC} 或 ${BLUE}docker-compose restart${NC}"
-echo "  查看状态: ${BLUE}./docker-status.sh${NC} 或 ${BLUE}docker-compose ps${NC}"
-echo "  查看日志: ${BLUE}./docker-logs.sh${NC} 或 ${BLUE}docker-compose logs -f${NC}"
+echo "  启动服务: ${BLUE}./docker-start.sh${NC} 或 ${BLUE}docker compose up -d${NC}"
+echo "  停止服务: ${BLUE}./docker-stop.sh${NC} 或 ${BLUE}docker compose down${NC}"
+echo "  重启服务: ${BLUE}./docker-restart.sh${NC} 或 ${BLUE}docker compose restart${NC}"
+echo "  查看状态: ${BLUE}./docker-status.sh${NC} 或 ${BLUE}docker compose ps${NC}"
+echo "  查看日志: ${BLUE}./docker-logs.sh${NC} 或 ${BLUE}docker compose logs -f${NC}"
 echo "  查看特定服务日志: ${BLUE}./docker-logs.sh backend${NC}"
 echo ""
 echo "容器管理:"
-echo "  进入后端容器: ${BLUE}docker-compose exec backend bash${NC}"
-echo "  进入前端容器: ${BLUE}docker-compose exec frontend sh${NC}"
+echo "  进入后端容器: ${BLUE}docker compose exec backend bash${NC}"
+echo "  进入前端容器: ${BLUE}docker compose exec frontend sh${NC}"
 echo "  查看资源占用: ${BLUE}docker stats${NC}"
 echo ""
 echo -e "${YELLOW}注意事项:${NC}"
 echo "1. 数据库文件: backend/conversation.db (已挂载到宿主机)"
 echo "2. 日志文件: logs/ 目录下"
-echo "3. 停止容器不会删除数据，使用 'docker-compose down -v' 会删除数据卷"
+echo "3. 停止容器不会删除数据，使用 'docker compose down -v' 会删除数据卷"
 echo "4. 定期备份数据库: cp backend/conversation.db backup/"
 
 if [[ $ENABLE_NGINX =~ ^[Yy]$ ]]; then
