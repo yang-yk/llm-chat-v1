@@ -22,6 +22,7 @@ import {
   updateConfig,
   searchConversations,
   deleteFeedback,
+  checkAdminPermission,
 } from '@/lib/api';
 
 export default function Home() {
@@ -37,6 +38,7 @@ export default function Home() {
   const [userName, setUserName] = useState('');
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     // 检查用户是否登录
@@ -60,8 +62,19 @@ export default function Home() {
     if (checkAuth()) {
       loadConversations();
       loadConfig();
+      checkAdmin();
     }
   }, [router]);
+
+  const checkAdmin = async () => {
+    try {
+      const result = await checkAdminPermission();
+      setIsAdmin(result.is_admin);
+    } catch (error) {
+      console.error('检查管理员权限失败:', error);
+      setIsAdmin(false);
+    }
+  };
 
   const loadConfig = async () => {
     try {
@@ -456,6 +469,20 @@ export default function Home() {
                 </svg>
                 <span className="text-sm text-gray-700 font-medium">{userName}</span>
               </div>
+
+              {/* 管理后台入口 - 仅管理员可见 */}
+              {isAdmin && (
+                <button
+                  onClick={() => router.push('/admin')}
+                  className="px-2 sm:px-4 py-2 bg-purple-600 text-white rounded-lg transition-all text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 shadow-sm hover:bg-purple-700 hover:shadow"
+                  title="管理后台"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <span className="hidden sm:inline">管理后台</span>
+                </button>
+              )}
 
               <ExportMenu
                 messages={messages}

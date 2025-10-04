@@ -329,3 +329,94 @@ export async function deleteFeedback(messageId: number): Promise<void> {
     throw new Error('删除反馈失败');
   }
 }
+
+// ==================== 管理后台API ====================
+
+// 检查管理员权限
+export async function checkAdminPermission(): Promise<{
+  is_admin: boolean;
+  username: string;
+}> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/check`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('检查权限失败');
+  }
+
+  return response.json();
+}
+
+// 获取所有用户列表
+export async function getAdminUsers(): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('获取用户列表失败');
+  }
+
+  return response.json();
+}
+
+// 获取用户详情
+export async function getAdminUserDetail(userId: number): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/users/${userId}`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('获取用户详情失败');
+  }
+
+  return response.json();
+}
+
+// 获取系统统计
+export async function getAdminStats(): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/stats`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('获取系统统计失败');
+  }
+
+  return response.json();
+}
+
+// 切换用户状态
+export async function toggleUserStatus(userId: number): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/users/${userId}/toggle-status`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || '切换用户状态失败');
+  }
+
+  return response.json();
+}
+
+// 设置用户管理员权限
+export async function setUserAdmin(userId: number, isAdmin: boolean): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/users/${userId}/set-admin?is_admin=${isAdmin}`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || '设置管理员权限失败');
+  }
+
+  return response.json();
+}

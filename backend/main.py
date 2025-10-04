@@ -22,7 +22,15 @@ from auth import (
     create_access_token,
     get_current_active_user,
     get_current_user,
+    get_current_admin_user,
     ACCESS_TOKEN_EXPIRE_MINUTES
+)
+from admin_service import (
+    get_all_users_with_stats,
+    get_user_detail,
+    get_system_stats,
+    toggle_user_status,
+    set_user_admin
 )
 
 # 创建FastAPI应用
@@ -763,6 +771,108 @@ async def delete_feedback(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"删除反馈失败: {str(e)}")
+
+
+# ==================== 管理后台API ====================
+
+@app.get("/api/admin/users")
+async def admin_get_users(
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """获取所有用户列表及统计信息（需要管理员权限）"""
+    try:
+        users = get_all_users_with_stats(db)
+        return {"users": users, "total": len(users)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取用户列表失败: {str(e)}")
+
+
+@app.get("/api/admin/users/{user_id}")
+async def admin_get_user_detail(
+    user_id: int,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """获取用户详细信息（需要管理员权限）"""
+    try:
+        user_detail = get_user_detail(db, user_id)
+        if not user_detail:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        return user_detail
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取用户详情失败: {str(e)}")
+
+
+@app.get("/api/admin/stats")
+async def admin_get_system_stats(
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """获取系统整体统计信息（需要管理员权限）"""
+    try:
+        stats = get_system_stats(db)
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取系统统计失败: {str(e)}")
+
+
+@app.post("/api/admin/users/{user_id}/toggle-status")
+async def admin_toggle_user_status(
+    user_id: int,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """切换用户激活状态（需要管理员权限）"""
+    try:
+        # 不能禁用自己
+        if user_id == current_admin.id:
+            raise HTTPException(status_code=400, detail="不能修改自己的状态")
+
+        result = toggle_user_status(db, user_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"切换用户状态失败: {str(e)}")
+
+
+@app.post("/api/admin/users/{user_id}/set-admin")
+async def admin_set_user_admin(
+    user_id: int,
+    is_admin: bool,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """设置用户管理员权限（需要管理员权限）"""
+    try:
+        # 不能修改自己的权限
+        if user_id == current_admin.id:
+            raise HTTPException(status_code=400, detail="不能修改自己的管理员权限")
+
+        result = set_user_admin(db, user_id, is_admin)
+        if not result:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"设置管理员权限失败: {str(e)}")
+
+
+@app.get("/api/admin/check")
+async def admin_check_permission(
+    current_user: User = Depends(get_current_active_user)
+):
+    """检查当前用户是否有管理员权限"""
+    return {
+        "is_admin": current_user.is_admin,
+        "username": current_user.username
+    }
 
 
 # 主程序入口

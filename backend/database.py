@@ -26,6 +26,7 @@ class User(Base):
     hashed_password = Column(String(200), nullable=False)  # 加密后的密码
     email = Column(String(100), unique=True, index=True, nullable=True)  # 邮箱（可选）
     is_active = Column(Boolean, default=True, nullable=False)  # 是否激活
+    is_admin = Column(Boolean, default=False, nullable=False)  # 是否为管理员
     created_at = Column(DateTime, default=get_beijing_time)
     updated_at = Column(DateTime, default=get_beijing_time, onupdate=get_beijing_time)
 

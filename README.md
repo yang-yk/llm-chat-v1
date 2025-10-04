@@ -12,6 +12,7 @@
 ### 核心功能
 
 - 👤 **用户认证系统**: 完整的注册、登录、JWT身份验证
+- 🛡️ **管理后台**: 系统管理员可查看用户列表、使用统计、管理用户权限
 - 🎨 **HTML预览**: HTML代码实时预览，支持全屏查看和一键下载
 - 💬 **多轮对话**: 支持上下文连贯的智能对话
 - 📝 **对话管理**: 创建、查看、删除对话会话
@@ -59,10 +60,11 @@
 ```
 llm-chat-system/
 ├── backend/                 # FastAPI 后端
-│   ├── main.py             # 主应用和路由
+│   ├── main.py             # 主应用和路由（含管理后台API）
 │   ├── config.py           # 配置管理
 │   ├── database.py         # 数据库模型（用户、对话、消息、反馈）
-│   ├── auth.py             # 用户认证和JWT处理
+│   ├── auth.py             # 用户认证和JWT处理（含管理员认证）
+│   ├── admin_service.py    # 管理后台业务逻辑
 │   ├── llm_service.py      # LLM API调用
 │   ├── conversation_service.py  # 对话管理
 │   └── requirements.txt    # Python依赖
@@ -84,6 +86,8 @@ llm-chat-system/
 │   ├── app/
 │   │   ├── auth/          # 认证页面
 │   │   │   └── page.tsx   # 登录/注册页面
+│   │   ├── admin/         # 管理后台页面
+│   │   │   └── page.tsx   # 用户管理和系统统计
 │   │   └── page.tsx       # 主应用页面
 │   ├── lib/              # 工具库
 │   │   ├── api.ts        # API集成
@@ -209,6 +213,38 @@ npm run dev
 3. 调整最大输出长度 (max_tokens)
 4. 点击"保存配置"
 
+### 管理后台（管理员功能）
+
+**访问条件**: 需要管理员权限
+
+#### 创建管理员
+```bash
+# 方法1: 使用脚本
+cd backend
+python3 create_admin.py
+
+# 方法2: 手动设置
+sqlite3 conversation.db "UPDATE users SET is_admin = 1 WHERE username = '你的用户名';"
+```
+
+#### 访问管理后台
+1. 以管理员身份登录
+2. 点击顶部"🛡️ 管理后台"按钮
+3. 进入管理页面查看系统统计和用户列表
+
+#### 管理功能
+- **系统统计**: 查看用户数、对话数、消息数、满意度等实时数据
+- **用户管理**:
+  - 查看所有用户及其使用情况（对话数、消息数）
+  - 启用/禁用用户账户
+  - 设置/取消管理员权限
+- **用户详情**: 查看单个用户的详细信息、对话列表、反馈统计
+
+**安全特性**:
+- 只有管理员可以访问管理后台
+- 管理员不能修改自己的状态和权限
+- 所有操作都有权限验证
+
 ## 🔧 配置说明
 
 ### 后端配置
@@ -308,6 +344,16 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 |------|------|------|
 | `/api/config` | GET | 获取配置 |
 | `/api/config` | POST | 更新配置 |
+
+#### 管理后台（需要管理员权限）
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/admin/check` | GET | 检查管理员权限 |
+| `/api/admin/stats` | GET | 获取系统统计 |
+| `/api/admin/users` | GET | 获取用户列表及统计 |
+| `/api/admin/users/{id}` | GET | 获取用户详情 |
+| `/api/admin/users/{id}/toggle-status` | POST | 切换用户激活状态 |
+| `/api/admin/users/{id}/set-admin` | POST | 设置管理员权限 |
 
 详细API文档访问: http://localhost:8000/docs
 
