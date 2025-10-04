@@ -420,3 +420,45 @@ export async function setUserAdmin(userId: number, isAdmin: boolean): Promise<an
 
   return response.json();
 }
+
+// 获取系统模型调用统计（管理员）
+export async function getAdminModelStats(): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/model-stats`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('获取模型统计失败');
+  }
+
+  return response.json();
+}
+
+// 获取指定用户的模型调用统计（管理员）
+export async function getAdminUserModelStats(userId: number): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/users/${userId}/model-stats`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('获取用户模型统计失败');
+  }
+
+  return response.json();
+}
+
+// 获取当前用户的模型调用统计
+export async function getMyModelStats(): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/users/me/model-stats`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('获取模型统计失败');
+  }
+
+  return response.json();
+}

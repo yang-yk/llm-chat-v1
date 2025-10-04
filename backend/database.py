@@ -101,6 +101,24 @@ class MessageFeedback(Base):
     user = relationship("User")
 
 
+class ModelUsage(Base):
+    """模型调用记录表"""
+    __tablename__ = "model_usages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # 用户ID
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)  # 对话ID
+    model_type = Column(String(50), nullable=False)  # 模型类型: codegeex/glm/custom
+    model_name = Column(String(200), nullable=False)  # 模型名称
+    api_url = Column(String(500), nullable=True)  # API地址（自定义模型）
+    tokens_used = Column(Integer, default=0)  # 使用的token数（如果有）
+    created_at = Column(DateTime, default=get_beijing_time, index=True)
+
+    # 关联用户和对话
+    user = relationship("User")
+    conversation = relationship("Conversation")
+
+
 # 创建数据库引擎
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
 

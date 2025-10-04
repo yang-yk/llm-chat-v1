@@ -23,6 +23,7 @@ import {
   searchConversations,
   deleteFeedback,
   checkAdminPermission,
+  getMyModelStats,
 } from '@/lib/api';
 
 export default function Home() {
@@ -39,6 +40,8 @@ export default function Home() {
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showModelStats, setShowModelStats] = useState(false);
+  const [modelStats, setModelStats] = useState<any>(null);
 
   useEffect(() => {
     // 检查用户是否登录
@@ -413,6 +416,17 @@ export default function Home() {
     }
   };
 
+  const handleShowModelStats = async () => {
+    try {
+      const stats = await getMyModelStats();
+      setModelStats(stats);
+      setShowModelStats(true);
+    } catch (error) {
+      console.error('获取模型统计失败:', error);
+      alert('获取模型统计失败');
+    }
+  };
+
   // 认证检查中，显示加载状态
   if (isAuthChecking) {
     return (
@@ -484,6 +498,18 @@ export default function Home() {
                 </button>
               )}
 
+              {/* 模型统计按钮 */}
+              <button
+                onClick={handleShowModelStats}
+                className="px-2 sm:px-4 py-2 bg-white text-gray-700 rounded-lg border border-gray-300 transition-all text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 shadow-sm hover:bg-gray-50 hover:shadow"
+                title="我的模型使用统计"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span className="hidden sm:inline">统计</span>
+              </button>
+
               <ExportMenu
                 messages={messages}
                 conversationTitle={conversations.find(c => c.session_id === currentSessionId)?.title || '对话记录'}
@@ -551,6 +577,116 @@ export default function Home() {
         onClose={() => setIsSettingsOpen(false)}
         onSave={handleSaveSettings}
       />
+
+      {/* 模型统计模态框 */}
+      {showModelStats && modelStats && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">我的模型使用统计</h2>
+              <button
+                onClick={() => setShowModelStats(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* 总调用统计 */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">总调用次数</p>
+                    <p className="mt-1 text-4xl font-bold text-gray-900">{modelStats.total_calls}</p>
+                  </div>
+                  <div className="p-4 bg-white rounded-full shadow-sm">
+                    <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                </div>
+                {modelStats.last_usage && (
+                  <p className="text-sm text-gray-600">
+                    最后使用: {new Date(modelStats.last_usage).toLocaleString('zh-CN')}
+                  </p>
+                )}
+              </div>
+
+              {/* 按模型类型统计 */}
+              {Object.keys(modelStats.by_type).length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">按模型类型</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {Object.entries(modelStats.by_type).map(([type, count]) => (
+                      <div key={type} className="bg-gray-50 p-4 rounded-lg">
+                        <p className="text-sm font-medium text-gray-600 capitalize mb-1">{type}</p>
+                        <p className="text-2xl font-bold text-gray-900">{count as number}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {modelStats.total_calls > 0 ? Math.round((count as number) / modelStats.total_calls * 100) : 0}%
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 详细模型列表 */}
+              {modelStats.by_model.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">模型详细使用情况</h3>
+                  <div className="space-y-3">
+                    {modelStats.by_model.map((model: any, index: number) => (
+                      <div key={index} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <span className="text-lg font-bold text-gray-400">#{index + 1}</span>
+                            <div>
+                              <p className="font-medium text-gray-900">{model.model_name}</p>
+                              <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded capitalize">{model.model_type}</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-2xl font-bold text-gray-900">{model.count}</p>
+                            <p className="text-sm text-gray-500">{model.percentage}%</p>
+                          </div>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
+                          <div
+                            className="bg-blue-600 h-2 rounded-full transition-all"
+                            style={{ width: `${model.percentage}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {modelStats.total_calls === 0 && (
+                <div className="text-center py-12">
+                  <svg className="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  <p className="text-gray-600">暂无使用记录</p>
+                  <p className="text-sm text-gray-500 mt-2">开始对话后将记录您的模型使用情况</p>
+                </div>
+              )}
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4">
+              <button
+                onClick={() => setShowModelStats(false)}
+                className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

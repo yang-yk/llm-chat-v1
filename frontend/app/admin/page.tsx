@@ -9,6 +9,7 @@ import {
   getAdminStats,
   toggleUserStatus,
   setUserAdmin,
+  getAdminModelStats,
 } from '@/lib/api';
 
 interface SystemStats {
@@ -52,11 +53,30 @@ interface UserInfo {
   };
 }
 
+interface ModelStats {
+  total_calls: number;
+  today_calls: number;
+  by_type: {
+    [key: string]: number;
+  };
+  by_model: Array<{
+    model_name: string;
+    model_type: string;
+    count: number;
+    percentage: number;
+  }>;
+  daily_calls: Array<{
+    date: string;
+    count: number;
+  }>;
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<SystemStats | null>(null);
+  const [modelStats, setModelStats] = useState<ModelStats | null>(null);
   const [users, setUsers] = useState<UserInfo[]>([]);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showUserDetail, setShowUserDetail] = useState(false);
@@ -84,12 +104,14 @@ export default function AdminPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [statsData, usersData] = await Promise.all([
+      const [statsData, usersData, modelStatsData] = await Promise.all([
         getAdminStats(),
         getAdminUsers(),
+        getAdminModelStats(),
       ]);
       setStats(statsData);
       setUsers(usersData.users);
+      setModelStats(modelStatsData);
     } catch (error) {
       console.error('加载数据失败:', error);
       alert('加载数据失败');
@@ -224,6 +246,86 @@ export default function AdminPage() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* 模型调用统计 */}
+        {modelStats && (
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">模型调用统计</h2>
+
+            {/* 总调用统计 */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">总调用次数</p>
+                    <p className="mt-2 text-3xl font-semibold text-gray-900">{modelStats.total_calls}</p>
+                    <p className="mt-1 text-xs text-gray-500">今日: {modelStats.today_calls}</p>
+                  </div>
+                  <div className="p-3 bg-indigo-100 rounded-full">
+                    <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-3">按模型类型</p>
+                  <div className="space-y-2">
+                    {Object.entries(modelStats.by_type).map(([type, count]) => (
+                      <div key={type} className="flex items-center justify-between">
+                        <span className="text-sm text-gray-700 capitalize">{type}</span>
+                        <span className="text-sm font-semibold text-gray-900">{count as number}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-3">热门模型 Top 3</p>
+                  <div className="space-y-2">
+                    {modelStats.by_model.slice(0, 3).map((model, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs font-bold text-gray-400">#{index + 1}</span>
+                          <span className="text-sm text-gray-700 truncate max-w-[120px]">{model.model_name}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs text-gray-500">{model.percentage}%</span>
+                          <span className="text-sm font-semibold text-gray-900">{model.count}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 详细模型列表 */}
+            {modelStats.by_model.length > 0 && (
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-sm font-medium text-gray-600 mb-4">所有模型调用详情</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {modelStats.by_model.map((model, index) => (
+                    <div key={index} className="border border-gray-200 rounded p-3">
+                      <div className="flex items-start justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-900 truncate">{model.model_name}</span>
+                        <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded capitalize">{model.model_type}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">调用次数</span>
+                        <span className="text-sm font-semibold text-gray-900">{model.count} ({model.percentage}%)</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

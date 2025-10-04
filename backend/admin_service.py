@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
-from database import User, Conversation, Message, MessageFeedback, get_beijing_time, BEIJING_TZ
+from database import User, Conversation, Message, MessageFeedback, ModelUsage, get_beijing_time, BEIJING_TZ
 
 
 def get_all_users_with_stats(db: Session) -> List[Dict[str, Any]]:
@@ -225,4 +225,119 @@ def set_user_admin(db: Session, user_id: int, is_admin: bool) -> Dict[str, Any]:
         "id": user.id,
         "username": user.username,
         "is_admin": user.is_admin
+    }
+
+
+def get_overall_model_stats(db: Session) -> Dict[str, Any]:
+    """获取系统整体模型调用统计"""
+    # 按模型类型统计调用次数
+    model_type_stats = db.query(
+        ModelUsage.model_type,
+        func.count(ModelUsage.id).label('count')
+    ).group_by(ModelUsage.model_type).all()
+
+    # 按具体模型统计调用次数
+    model_name_stats = db.query(
+        ModelUsage.model_name,
+        ModelUsage.model_type,
+        func.count(ModelUsage.id).label('count')
+    ).group_by(ModelUsage.model_name, ModelUsage.model_type).all()
+
+    # 总调用次数
+    total_calls = db.query(func.count(ModelUsage.id)).scalar()
+
+    # 今日调用次数
+    beijing_now = get_beijing_time()
+    today_start = beijing_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_calls = db.query(func.count(ModelUsage.id)).filter(
+        ModelUsage.created_at >= today_start
+    ).scalar()
+
+    # 最近7天每天的调用次数
+    seven_days_ago = beijing_now - timedelta(days=7)
+    daily_calls = []
+    for i in range(7):
+        day_start = (beijing_now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        count = db.query(func.count(ModelUsage.id)).filter(
+            ModelUsage.created_at >= day_start,
+            ModelUsage.created_at < day_end
+        ).scalar()
+        daily_calls.append({
+            "date": day_start.strftime("%Y-%m-%d"),
+            "count": count
+        })
+
+    # 按模型类型分组
+    by_type = {}
+    for model_type, count in model_type_stats:
+        by_type[model_type] = count
+
+    # 按具体模型分组
+    by_model = []
+    for model_name, model_type, count in model_name_stats:
+        by_model.append({
+            "model_name": model_name,
+            "model_type": model_type,
+            "count": count,
+            "percentage": round(count / total_calls * 100, 2) if total_calls > 0 else 0
+        })
+
+    return {
+        "total_calls": total_calls,
+        "today_calls": today_calls,
+        "by_type": by_type,
+        "by_model": sorted(by_model, key=lambda x: x['count'], reverse=True),
+        "daily_calls": list(reversed(daily_calls))  # 从旧到新排序
+    }
+
+
+def get_user_model_stats(db: Session, user_id: int) -> Dict[str, Any]:
+    """获取指定用户的模型调用统计"""
+    # 按模型类型统计
+    model_type_stats = db.query(
+        ModelUsage.model_type,
+        func.count(ModelUsage.id).label('count')
+    ).filter(ModelUsage.user_id == user_id).group_by(ModelUsage.model_type).all()
+
+    # 按具体模型统计
+    model_name_stats = db.query(
+        ModelUsage.model_name,
+        ModelUsage.model_type,
+        func.count(ModelUsage.id).label('count')
+    ).filter(ModelUsage.user_id == user_id).group_by(
+        ModelUsage.model_name, ModelUsage.model_type
+    ).all()
+
+    # 总调用次数
+    total_calls = db.query(func.count(ModelUsage.id)).filter(
+        ModelUsage.user_id == user_id
+    ).scalar()
+
+    # 最近一次调用时间
+    last_usage = db.query(ModelUsage).filter(
+        ModelUsage.user_id == user_id
+    ).order_by(ModelUsage.created_at.desc()).first()
+
+    # 按模型类型分组
+    by_type = {}
+    for model_type, count in model_type_stats:
+        by_type[model_type] = count
+
+    # 按具体模型分组
+    by_model = []
+    for model_name, model_type, count in model_name_stats:
+        by_model.append({
+            "model_name": model_name,
+            "model_type": model_type,
+            "count": count,
+            "percentage": round(count / total_calls * 100, 2) if total_calls > 0 else 0
+        })
+
+    return {
+        "user_id": user_id,
+        "total_calls": total_calls,
+        "last_usage": last_usage.created_at.isoformat() if last_usage else None,
+        "by_type": by_type,
+        "by_model": sorted(by_model, key=lambda x: x['count'], reverse=True)
     }

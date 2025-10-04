@@ -13,7 +13,7 @@ from datetime import timedelta
 import os
 import json
 
-from database import get_db, init_db, UserConfig, User, MessageFeedback, Message, Conversation
+from database import get_db, init_db, UserConfig, User, MessageFeedback, Message, Conversation, ModelUsage
 from conversation_service import conversation_service
 from config import HOST, PORT
 from auth import (
@@ -30,7 +30,9 @@ from admin_service import (
     get_user_detail,
     get_system_stats,
     toggle_user_status,
-    set_user_admin
+    set_user_admin,
+    get_overall_model_stats,
+    get_user_model_stats
 )
 
 # 创建FastAPI应用
@@ -316,6 +318,30 @@ async def create_conversation(
         raise HTTPException(status_code=500, detail=f"创建会话失败: {str(e)}")
 
 
+def record_model_usage(db: Session, user_id: int, session_id: str, model_type: str, model_name: str, api_url: str = None):
+    """记录模型调用"""
+    try:
+        # 获取conversation_id
+        conversation = db.query(Conversation).filter_by(session_id=session_id).first()
+        if not conversation:
+            print(f"[WARNING] 无法记录模型使用：会话不存在 {session_id}")
+            return
+
+        usage = ModelUsage(
+            user_id=user_id,
+            conversation_id=conversation.id,
+            model_type=model_type,
+            model_name=model_name,
+            api_url=api_url
+        )
+        db.add(usage)
+        db.commit()
+        print(f"[MODEL USAGE] 已记录: user_id={user_id}, model={model_name}, type={model_type}")
+    except Exception as e:
+        print(f"[ERROR] 记录模型使用失败: {str(e)}")
+        db.rollback()
+
+
 @app.post("/chat")
 async def chat(
     request: ChatRequest,
@@ -345,7 +371,11 @@ async def chat(
         else:
             max_tokens = global_config["max_tokens"]
 
-        # 根据用户配置设置LLM服务
+        # 根据用户配置设置LLM服务，并记录模型信息
+        model_type = None
+        model_name = None
+        api_url = None
+
         if user_config:
             model_type = user_config.current_model_type
             print(f"[DEBUG] 使用用户配置，模型类型: {model_type}, user_id: {request.user_id}")
@@ -353,25 +383,36 @@ async def chat(
                 llm_service.api_url = PRESET_MODELS["codegeex"]["url"]
                 llm_service.model = PRESET_MODELS["codegeex"]["model"]
                 llm_service.api_key = PRESET_MODELS["codegeex"]["key"]
+                model_name = PRESET_MODELS["codegeex"]["model"]
+                api_url = PRESET_MODELS["codegeex"]["url"]
             elif model_type == "glm":
                 llm_service.api_url = PRESET_MODELS["glm"]["url"]
                 llm_service.model = PRESET_MODELS["glm"]["model"]
                 llm_service.api_key = PRESET_MODELS["glm"]["key"]
+                model_name = PRESET_MODELS["glm"]["model"]
+                api_url = PRESET_MODELS["glm"]["url"]
             elif model_type == "custom":
                 llm_service.api_url = user_config.custom_api_url
                 llm_service.model = user_config.custom_model
                 llm_service.api_key = user_config.custom_api_key
+                model_name = user_config.custom_model
+                api_url = user_config.custom_api_url
         else:
             # 没有用户配置时，使用全局当前模型类型
+            model_type = current_model_type
             print(f"[DEBUG] 没有用户配置，使用全局默认: {current_model_type}, user_id: {request.user_id}")
             if current_model_type == "codegeex":
                 llm_service.api_url = PRESET_MODELS["codegeex"]["url"]
                 llm_service.model = PRESET_MODELS["codegeex"]["model"]
                 llm_service.api_key = PRESET_MODELS["codegeex"]["key"]
+                model_name = PRESET_MODELS["codegeex"]["model"]
+                api_url = PRESET_MODELS["codegeex"]["url"]
             elif current_model_type == "glm":
                 llm_service.api_url = PRESET_MODELS["glm"]["url"]
                 llm_service.model = PRESET_MODELS["glm"]["model"]
                 llm_service.api_key = PRESET_MODELS["glm"]["key"]
+                model_name = PRESET_MODELS["glm"]["model"]
+                api_url = PRESET_MODELS["glm"]["url"]
 
         print(f"[MODEL CONFIG] API: {llm_service.api_url}, Model: {llm_service.model}")
 
@@ -393,6 +434,10 @@ async def chat(
                         yield f"data: {json.dumps({'chunk': chunk}, ensure_ascii=False)}\n\n"
 
                     print(f"[STREAM COMPLETE] Sent {chunk_count} chunks")
+
+                    # 记录模型调用
+                    record_model_usage(db, current_user.id, request.session_id, model_type, model_name, api_url)
+
                     # 发送完成信号
                     yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
 
@@ -420,6 +465,10 @@ async def chat(
                 temperature=request.temperature,
                 max_tokens=max_tokens
             )
+
+            # 记录模型调用
+            record_model_usage(db, current_user.id, request.session_id, model_type, model_name, api_url)
+
             return ChatResponse(
                 session_id=request.session_id,
                 user_message=request.message,
@@ -862,6 +911,53 @@ async def admin_set_user_admin(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"设置管理员权限失败: {str(e)}")
+
+
+@app.get("/api/admin/model-stats")
+async def admin_get_model_stats(
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """获取系统整体模型调用统计（管理员）"""
+    try:
+        stats = get_overall_model_stats(db)
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取模型统计失败: {str(e)}")
+
+
+@app.get("/api/admin/users/{user_id}/model-stats")
+async def admin_get_user_model_stats(
+    user_id: int,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """获取指定用户的模型调用统计（管理员）"""
+    try:
+        # 验证用户是否存在
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+
+        stats = get_user_model_stats(db, user_id)
+        return stats
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取用户模型统计失败: {str(e)}")
+
+
+@app.get("/api/users/me/model-stats")
+async def get_my_model_stats(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """获取当前用户的模型调用统计"""
+    try:
+        stats = get_user_model_stats(db, current_user.id)
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取模型统计失败: {str(e)}")
 
 
 @app.get("/api/admin/check")
