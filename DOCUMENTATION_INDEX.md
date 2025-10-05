@@ -35,6 +35,12 @@
 - **[offline-deployment/offline-deploy.sh](offline-deployment/offline-deploy.sh)** - 一键部署脚本 (支持灵活配置)
 - **[create-offline-package.sh](create-offline-package.sh)** - 创建离线部署包脚本
 
+### Docker 构建缓存
+- **[docker-build-cache/README.md](docker-build-cache/README.md)** ⭐ - Docker 构建缓存完整指南
+- **[docker-build-cache/QUICK_START.md](docker-build-cache/QUICK_START.md)** - 快速开始（5分钟上手）
+- **[docker-build-cache/INTEGRATION_GUIDE.md](docker-build-cache/INTEGRATION_GUIDE.md)** - 离线部署集成指南
+- **[docker-build-cache/export-build-cache.sh](docker-build-cache/export-build-cache.sh)** - 缓存导出脚本
+
 ## 🔧 配置和管理
 
 ### 系统管理

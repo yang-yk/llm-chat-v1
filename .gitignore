@@ -77,3 +77,11 @@ offline-deployment/docker-*.tgz
 llm-chat-offline-*.tar.gz
 offline-deployment-package/*.tar
 offline-deployment-package/*.tar.gz
+
+# Docker 构建缓存（太大，不推送到 GitHub）
+docker-build-cache/*.tar
+docker-build-cache/*.tar.gz
+docker-build-cache/pip-cache/
+docker-build-cache/npm-cache/
+docker-build-cache/cache-manifest.txt
+docker-build-cache/import-build-cache.sh
