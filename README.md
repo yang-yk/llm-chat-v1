@@ -7,12 +7,21 @@
 ![Node](https://img.shields.io/badge/node-18+-green.svg)
 ![TypeScript](https://img.shields.io/badge/typescript-5.0+-blue.svg)
 
+> **📢 项目路径已更新**
+> 项目已从 `/home/yangyk/llm-chat/llm-chat-v1` 迁移到 `/home/data2/yangyk/llm-chat-v1`
+> 详见 [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) 和 [CHANGELOG.md](CHANGELOG.md)
+
 ## ✨ 特性
 
 ### 核心功能
 
 - 👤 **用户认证系统**: 完整的注册、登录、JWT身份验证
 - 🛡️ **管理后台**: 系统管理员可查看用户列表、使用统计、管理用户权限
+  - 用户搜索功能（按用户名）
+  - 分页显示（每页 10 个用户）
+  - 智能排序（admin > 管理员 > 普通用户，同类按字母排序）
+  - 手动刷新按钮
+  - 新标签页打开
 - 📊 **模型调用统计**: 自动记录每次模型调用，支持查看个人和全局统计数据
 - 🎨 **HTML预览**: HTML代码实时预览，支持全屏查看和一键下载
 - 💬 **多轮对话**: 支持上下文连贯的智能对话
@@ -21,14 +30,14 @@
 - 🔍 **消息搜索**: 全文搜索对话内容和标题
 - 📤 **对话导出**: 支持导出为Markdown、PDF、TXT格式
 - ⏸️ **AI暂停控制**: 生成过程中可随时停止，已生成内容保留
-- 👍 **消息反馈**: 对AI回复点赞或点踩，支持反馈管理
+- 👍 **消息反馈**: 对AI回复点赞或点踩，支持反馈管理，可取消已提交的反馈
 - 🔁 **重新生成**: 对不满意的回复可以重新生成
 - ⚙️ **模型配置**: 支持多种预设模型和自定义配置
 - 🎯 **代码高亮**: GitHub风格代码高亮，支持30+种编程语言
 - 💾 **持久化**: 所有对话自动保存到数据库
 - 🏷️ **智能标题**: 根据对话内容自动生成标题
 - 👥 **用户配置**: 每个用户独立的模型配置和对话隔离
-- 📋 **一键复制**: 支持复制消息内容和代码块
+- 📋 **一键复制**: 支持复制消息内容和代码块，双重机制确保兼容性
 - 📱 **响应式界面**: 优雅的对话界面，完美支持移动端
 
 ### 界面特性
@@ -543,6 +552,18 @@ npm run test
 
 ## 📚 文档
 
+### 部署文档
+- **[在线部署指南](online-deployment/ONLINE_DEPLOYMENT_GUIDE.md)** ⭐ - 有网络环境快速部署
+- **[离线部署指南](offline-deployment/OFFLINE_DEPLOYMENT_GUIDE.md)** ⭐ - 无网络环境离线部署
+- **[依赖清单](online-deployment/DEPENDENCIES.md)** - 完整依赖包和版本信息
+- [Docker部署指南](DOCKER_DEPLOYMENT_GUIDE.md) - Docker 完整部署方案
+- [生产环境部署](PRODUCTION_DEPLOYMENT_GUIDE.md) - 生产环境部署指南
+
+### 项目文档
+- [快速参考](QUICK_REFERENCE.md) - 常用命令和配置速查
+- [更新日志](CHANGELOG.md) - 详细更新历史
+- [迁移指南](MIGRATION_GUIDE.md) - 项目迁移说明
+- [文档索引](DOCUMENTATION_INDEX.md) - 完整文档导航
 - [后端文档](backend/README.md) - 后端详细说明
 - [前端文档](frontend/README.md) - 前端详细说明
 - [API文档](http://localhost:8000/docs) - 在线API文档

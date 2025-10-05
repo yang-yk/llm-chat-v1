@@ -18,7 +18,7 @@ Docker 容器无法访问宿主机的模型服务（端口 11551, 11553）
 
 ```bash
 # 更新前端环境变量
-cd /home/yangyk/llm-chat/llm-chat-v1/frontend
+cd /home/data2/yangyk/llm-chat-v1/frontend
 echo "NEXT_PUBLIC_API_URL=http://111.19.168.151:8000" > .env.local
 
 # 重新构建前端

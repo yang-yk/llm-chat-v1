@@ -72,3 +72,8 @@ status-services.sh
 offline-deployment/*.tar
 offline-deployment/*.tgz
 offline-deployment/docker-*.tgz
+
+# 离线部署包（太大，不推送到 GitHub）
+llm-chat-offline-*.tar.gz
+offline-deployment-package/*.tar
+offline-deployment-package/*.tar.gz

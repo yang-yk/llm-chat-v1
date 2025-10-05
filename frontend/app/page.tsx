@@ -487,7 +487,7 @@ export default function Home() {
               {/* 管理后台入口 - 仅管理员可见 */}
               {isAdmin && (
                 <button
-                  onClick={() => router.push('/admin')}
+                  onClick={() => window.open('/admin', '_blank')}
                   className="px-2 sm:px-4 py-2 bg-purple-600 text-white rounded-lg transition-all text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 shadow-sm hover:bg-purple-700 hover:shadow"
                   title="管理后台"
                 >

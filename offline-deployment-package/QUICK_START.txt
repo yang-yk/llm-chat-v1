@@ -1,0 +1,78 @@
+LLM Chat 快速部署指南
+======================
+
+环境要求：
+- Linux 系统（推荐 Ubuntu 20.04+）
+- 至少 4GB 可用磁盘空间
+- Docker 和 Docker Compose
+
+快速部署步骤：
+==============
+
+1. 安装 Docker（如已安装可跳过）
+   -----------------------------
+   bash install-docker-offline.sh
+
+2. 运行部署脚本
+   -------------
+   bash offline-deploy.sh
+
+3. 配置参数（按提示输入）
+   -----------------------
+   - 服务器 IP 地址（必填）
+   - 端口配置（可使用默认值）
+     * Nginx: 80
+     * 前端: 3000
+     * 后端: 8000
+   - 部署目录（默认 /opt/llm-chat）
+   - 模型 API 配置
+   - 管理员账号
+
+4. 等待部署完成
+   -------------
+   脚本会自动：
+   - 解压项目源码
+   - 加载 Docker 镜像
+   - 生成配置文件
+   - 启动所有服务
+   - 创建管理员账号
+
+5. 访问服务
+   ---------
+   主页: http://你的IP:80
+   管理后台: http://你的IP:80/admin
+
+默认管理员账号：
+- 用户名: admin
+- 密码: Admin@2025
+（建议首次登录后立即修改）
+
+故障排查：
+----------
+如果遇到问题：
+1. 检查 Docker 服务是否运行
+   systemctl status docker
+
+2. 查看容器日志
+   cd /opt/llm-chat
+   docker compose logs -f
+
+3. 检查端口是否被占用
+   netstat -tulpn | grep -E '80|3000|8000'
+
+4. 参考详细文档
+   OFFLINE_DEPLOYMENT_GUIDE.md
+
+常用命令：
+----------
+cd /opt/llm-chat  # 进入部署目录
+
+docker compose ps           # 查看服务状态
+docker compose logs -f      # 查看日志
+docker compose restart      # 重启服务
+docker compose down         # 停止服务
+docker compose up -d        # 启动服务
+
+需要帮助？
+----------
+查看完整文档: OFFLINE_DEPLOYMENT_GUIDE.md

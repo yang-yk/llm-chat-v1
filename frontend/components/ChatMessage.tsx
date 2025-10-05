@@ -35,12 +35,39 @@ export default function ChatMessage({ message, onRegenerate }: ChatMessageProps)
 
   const handleCopyMessage = async () => {
     try {
-      // 去除内容两端的空白字符
-      await navigator.clipboard.writeText(message.content.trim());
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      const textToCopy = message.content.trim();
+
+      // 优先使用 Clipboard API
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(textToCopy);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } else {
+        // 降级方案：使用传统的 execCommand 方法
+        const textArea = document.createElement('textarea');
+        textArea.value = textToCopy;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        try {
+          const successful = document.execCommand('copy');
+          if (successful) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          } else {
+            throw new Error('execCommand 复制失败');
+          }
+        } finally {
+          document.body.removeChild(textArea);
+        }
+      }
     } catch (err) {
       console.error('复制失败:', err);
+      alert('复制失败，请手动复制');
     }
   };
 
@@ -48,18 +75,22 @@ export default function ChatMessage({ message, onRegenerate }: ChatMessageProps)
     if (!message.id) return;
 
     try {
-      // 乐观更新UI
+      // 保存之前的状态以便回滚
       const previousFeedback = feedback;
 
       // 如果点击的是当前已选中的反馈，则取消反馈
       if (feedback === type) {
         setFeedback(null);
-        await fetch(`/api/feedback/${message.id}`, {
+        const response = await fetch(`/api/feedback/${message.id}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('access_token')}`
           }
         });
+
+        if (!response.ok) {
+          throw new Error('取消反馈失败');
+        }
       } else {
         // 否则提交新的反馈（点赞和点踩互斥，后端会自动更新）
         setFeedback(type);
@@ -67,8 +98,19 @@ export default function ChatMessage({ message, onRegenerate }: ChatMessageProps)
       }
     } catch (err) {
       console.error('提交反馈失败:', err);
-      // 出错时恢复之前的状态
-      // 这里可以根据需要回滚UI状态
+      // 出错时需要重新获取反馈状态
+      if (message.id) {
+        try {
+          const response = await getFeedback(message.id);
+          if (response.has_feedback) {
+            setFeedback(response.feedback_type);
+          } else {
+            setFeedback(null);
+          }
+        } catch (error) {
+          console.error('获取反馈状态失败:', error);
+        }
+      }
     }
   };
 
