@@ -12,8 +12,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# 项目根目录
-PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+# 获取脚本所在目录和项目根目录
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/backend"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 
@@ -99,21 +100,27 @@ install_frontend_deps() {
 
 # 检查数据库权限
 check_database() {
-    echo -e "${YELLOW}🗄️  检查数据库权限...${NC}"
+    echo -e "${YELLOW}🗄️  检查数据库目录...${NC}"
 
-    # 检查根目录的 conversation.db
-    if [ -f "$PROJECT_ROOT/conversation.db" ]; then
-        if [ ! -w "$PROJECT_ROOT/conversation.db" ]; then
+    # 创建数据库目录
+    DB_DIR="$PROJECT_ROOT/db"
+    mkdir -p "$DB_DIR"
+
+    # 确保数据库目录可写
+    if [ ! -w "$DB_DIR" ]; then
+        echo -e "${RED}❌ 数据库目录不可写: $DB_DIR${NC}"
+        exit 1
+    fi
+
+    # 检查数据库文件权限（如果已存在）
+    if [ -f "$DB_DIR/conversation.db" ]; then
+        if [ ! -w "$DB_DIR/conversation.db" ]; then
             echo -e "${YELLOW}⚠️  修复数据库文件权限...${NC}"
-            chmod 664 "$PROJECT_ROOT/conversation.db" 2>/dev/null || true
+            chmod 664 "$DB_DIR/conversation.db" 2>/dev/null || true
         fi
-        echo -e "${GREEN}✅ 数据库权限正常${NC}"
     fi
 
-    # 确保项目根目录可写
-    if [ ! -w "$PROJECT_ROOT" ]; then
-        echo -e "${RED}❌ 项目根目录不可写，可能影响数据库创建${NC}"
-    fi
+    echo -e "${GREEN}✅ 数据库目录已就绪: $DB_DIR${NC}"
 }
 
 # 启动后端
@@ -134,8 +141,22 @@ start_backend() {
         exit 1
     fi
 
+    # 确定Python解释器路径（优先使用conda py38环境）
+    PYTHON_CMD="python3"
+    if command -v conda &> /dev/null; then
+        # 检查py38环境是否存在
+        if conda env list | grep -q "^py38 "; then
+            # 获取py38环境的Python路径
+            CONDA_PY38_PATH=$(conda env list | grep "^py38 " | awk '{print $NF}')/bin/python
+            if [ -x "$CONDA_PY38_PATH" ]; then
+                PYTHON_CMD="$CONDA_PY38_PATH"
+                echo -e "${YELLOW}📦 使用conda环境: py38${NC}"
+            fi
+        fi
+    fi
+
     # 启动后端（使用uvicorn）
-    nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 > "$BACKEND_LOG" 2>&1 &
+    nohup $PYTHON_CMD -m uvicorn main:app --host 0.0.0.0 --port 8000 > "$BACKEND_LOG" 2>&1 &
     BACKEND_PID=$!
     echo $BACKEND_PID > "$BACKEND_PID_FILE"
 
@@ -171,8 +192,14 @@ start_frontend() {
         sleep 1
     fi
 
-    # 启动前端
-    nohup npm run dev > "$FRONTEND_LOG" 2>&1 &
+    # 检查是否已构建
+    if [ ! -d ".next" ] || [ ! -f ".next/BUILD_ID" ]; then
+        echo -e "${YELLOW}📦 首次运行，正在构建前端（可能需要几分钟）...${NC}"
+        npm run build
+    fi
+
+    # 启动前端（生产模式）
+    nohup npm start > "$FRONTEND_LOG" 2>&1 &
     FRONTEND_PID=$!
     echo $FRONTEND_PID > "$FRONTEND_PID_FILE"
 

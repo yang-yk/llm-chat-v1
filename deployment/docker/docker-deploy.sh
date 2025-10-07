@@ -17,9 +17,17 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# 检查是否在项目根目录
+# 检查是否在deployment/docker目录
 if [ ! -f "docker-compose.yml" ]; then
-    echo -e "${RED}错误: 请在项目根目录运行此脚本${NC}"
+    echo -e "${RED}错误: 请在 deployment/docker 目录运行此脚本${NC}"
+    echo -e "${YELLOW}提示: cd deployment/docker && ./docker-deploy.sh${NC}"
+    exit 1
+fi
+
+# 检查项目根目录是否存在
+if [ ! -d "../../backend" ] || [ ! -d "../../frontend" ]; then
+    echo -e "${RED}错误: 未找到 backend 或 frontend 目录${NC}"
+    echo -e "${YELLOW}请确保在正确的项目目录结构中运行此脚本${NC}"
     exit 1
 fi
 

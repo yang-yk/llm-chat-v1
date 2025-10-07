@@ -1,0 +1,96 @@
+{
+  "_comment": "LLM Chat System 部署配置文件",
+  "_usage": "1. 复制此文件为 deployment-config.json; 2. 修改配置参数; 3. 运行 ./apply-config.sh",
+  "_version": "1.0.0",
+
+  "server": {
+    "_description": "服务器基本信息",
+    "host": "111.19.168.151",
+    "domain": "example.com",
+    "user": "yangyk",
+    "project_path": "/home/data2/yangyk/llm-chat-v1"
+  },
+
+  "backend": {
+    "_description": "后端服务配置",
+    "host": "0.0.0.0",
+    "port": 8000,
+    "llm": {
+      "_description": "大模型API配置",
+      "api_url": "http://111.19.168.151:11553/v1/chat/completions",
+      "model": "glm4_32B_chat",
+      "api_key": "glm432b"
+    },
+    "database": {
+      "_description": "数据库配置",
+      "url": "sqlite:///./conversation.db"
+    },
+    "jwt": {
+      "_description": "JWT认证配置",
+      "secret_key": "CHANGE_THIS_TO_RANDOM_STRING_IN_PRODUCTION",
+      "algorithm": "HS256",
+      "access_token_expire_minutes": 10080
+    }
+  },
+
+  "frontend": {
+    "_description": "前端服务配置",
+    "port": 3000,
+    "api_url": "http://111.19.168.151:8000",
+    "_note": "api_url应该指向后端服务的完整地址（包含协议和端口）"
+  },
+
+  "nginx": {
+    "_description": "Nginx反向代理配置",
+    "enabled": true,
+    "port": 80,
+    "server_name": "_",
+    "backend_proxy": "http://127.0.0.1:8000",
+    "frontend_proxy": "http://127.0.0.1:3000",
+    "_note": "如果使用Nginx，frontend.api_url应该指向Nginx地址"
+  },
+
+  "docker": {
+    "_description": "Docker部署配置",
+    "enabled": true,
+    "compose": {
+      "backend": {
+        "network_mode": "host",
+        "restart": "unless-stopped"
+      },
+      "frontend": {
+        "port_mapping": "3000:3000",
+        "restart": "unless-stopped"
+      },
+      "nginx": {
+        "network_mode": "host",
+        "restart": "unless-stopped"
+      }
+    }
+  },
+
+  "systemd": {
+    "_description": "Systemd服务配置（本地部署使用）",
+    "enabled": false,
+    "user": "yangyk",
+    "backend": {
+      "working_directory": "/home/data2/yangyk/llm-chat-v1/backend",
+      "exec_start": "/usr/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8000",
+      "log_directory": "/home/data2/yangyk/llm-chat-v1/logs"
+    },
+    "frontend": {
+      "working_directory": "/home/data2/yangyk/llm-chat-v1/frontend",
+      "exec_start": "/usr/bin/npm start",
+      "log_directory": "/home/data2/yangyk/llm-chat-v1/logs"
+    }
+  },
+
+  "deployment": {
+    "_description": "部署选项",
+    "type": "docker",
+    "_options": "docker | local | hybrid",
+    "auto_generate_secret": true,
+    "create_logs_directory": true,
+    "backup_before_apply": true
+  }
+}

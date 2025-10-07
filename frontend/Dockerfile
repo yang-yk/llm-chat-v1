@@ -13,6 +13,10 @@ RUN npm ci
 # 复制应用代码
 COPY . .
 
+# 接收构建参数
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+
 # 构建应用
 RUN npm run build
 

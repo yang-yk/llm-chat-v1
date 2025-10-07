@@ -1,0 +1,107 @@
+{
+  "_comment": "LLM Chat System 本地部署配置",
+  "_usage": "此配置文件用于本地部署方式（不使用Docker）",
+  "_version": "1.0.0",
+  "server": {
+    "_description": "服务器基本信息",
+    "host": "111.19.168.151",
+    "domain": "",
+    "user": "yangyk",
+    "project_path": "/home/data2/yangyk/llm-chat-v1"
+  },
+  "backend": {
+    "_description": "后端服务配置",
+    "host": "0.0.0.0",
+    "port": 8000,
+    "llm": {
+      "_description": "大模型API配置",
+      "api_url": "http://111.19.168.151:11553/v1/chat/completions",
+      "model": "glm4_32B_chat",
+      "api_key": "glm432b",
+      "_note": "请根据实际LLM服务修改api_url、model和api_key"
+    },
+    "database": {
+      "_description": "数据库配置",
+      "url": "sqlite:///./conversation.db",
+      "_note": "Docker部署使用持久化卷存储数据库"
+    },
+    "jwt": {
+      "_description": "JWT认证配置",
+      "secret_key": "",
+      "algorithm": "HS256",
+      "access_token_expire_minutes": 10080,
+      "_note": "secret_key留空将自动生成随机密钥，生产环境强烈建议自动生成"
+    }
+  },
+  "frontend": {
+    "_description": "前端服务配置",
+    "port": 3000,
+    "api_url": "http://111.19.168.151:8000",
+    "_note": "Docker部署时，如果启用Nginx，api_url应改为 http://111.19.168.151（不带端口）"
+  },
+  "nginx": {
+    "_description": "Nginx反向代理配置（Docker部署推荐启用）",
+    "enabled": true,
+    "port": 80,
+    "server_name": "_",
+    "backend_proxy": "http://127.0.0.1:8000",
+    "frontend_proxy": "http://127.0.0.1:3000",
+    "_note": "Docker部署建议启用Nginx，提供统一访问入口"
+  },
+  "docker": {
+    "_description": "Docker部署配置",
+    "enabled": true,
+    "compose": {
+      "backend": {
+        "network_mode": "host",
+        "restart": "unless-stopped",
+        "_note": "使用host模式方便访问宿主机的LLM服务"
+      },
+      "frontend": {
+        "port_mapping": "3000:3000",
+        "restart": "unless-stopped",
+        "_note": "前端容器端口映射"
+      },
+      "nginx": {
+        "network_mode": "host",
+        "restart": "unless-stopped",
+        "_note": "Nginx使用host模式监听80端口"
+      }
+    },
+    "_deployment_note": "Docker部署命令: cd deployment/docker && docker compose up -d"
+  },
+  "systemd": {
+    "_description": "Systemd服务配置（Docker部署不使用）",
+    "enabled": false,
+    "user": "yangyk",
+    "backend": {
+      "working_directory": "/home/data2/yangyk/llm-chat-v1/backend",
+      "exec_start": "/usr/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8000",
+      "log_directory": "/home/data2/yangyk/llm-chat-v1/logs"
+    },
+    "frontend": {
+      "working_directory": "/home/data2/yangyk/llm-chat-v1/frontend",
+      "exec_start": "/usr/bin/npm start",
+      "log_directory": "/home/data2/yangyk/llm-chat-v1/logs"
+    },
+    "_note": "Docker部署不需要systemd配置"
+  },
+  "deployment": {
+    "_description": "部署选项",
+    "type": "docker",
+    "_options": "docker | local | hybrid",
+    "auto_generate_secret": true,
+    "create_logs_directory": true,
+    "backup_before_apply": true,
+    "_note": "Docker部署使用容器内路径存储数据库"
+  },
+  "_quick_start": {
+    "_description": "快速部署步骤",
+    "step1": "复制此文件: cp deployment-config.example.json deployment-config.json",
+    "step2": "根据实际环境修改配置: vim deployment-config.json",
+    "step3": "应用配置: ./apply-config.sh",
+    "step4": "启动服务: cd deployment/docker && docker compose up -d",
+    "step5": "查看日志: docker compose logs -f",
+    "step6": "访问应用: http://111.19.168.151"
+  }
+}

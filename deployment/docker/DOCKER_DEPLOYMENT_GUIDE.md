@@ -449,6 +449,28 @@ docker load -i frontend.tar
 
 ### 5. 数据备份与恢复
 
+#### 数据库存储位置
+
+**数据存储说明**：
+
+- **宿主机物理位置**：`/var/lib/docker/volumes/llm-chat-v1_backend-db/_data/conversation.db`
+- **容器内路径**：`/app/db/conversation.db`
+- **Docker Volume**：`llm-chat-v1_backend-db`（命名卷）
+- **持久化日志**：`llm-chat-v1_backend-logs`
+
+数据通过 Docker volume 持久化存储，即使删除容器，数据也不会丢失。
+
+```bash
+# 查看数据库文件
+docker compose exec backend ls -lh /app/db/
+
+# 查看 volume 详情和挂载点
+docker volume inspect llm-chat-v1_backend-db
+
+# 查看所有项目相关的 volume
+docker volume ls | grep llm-chat
+```
+
 #### 备份数据
 
 ```bash

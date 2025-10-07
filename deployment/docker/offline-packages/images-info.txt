@@ -1,0 +1,29 @@
+# Docker镜像信息
+导出时间: $(date)
+导出机器: $(uname -a)
+
+## 镜像列表
+1. 后端镜像: docker-backend:latest
+   文件: backend-image.tar
+   大小: 374M
+
+2. 前端镜像: docker-frontend:latest
+   文件: frontend-image.tar
+   大小: 1.4G
+
+3. Nginx镜像: nginx:alpine
+   文件: nginx-image.tar
+   大小: 52M
+
+## 文件清单
+Tue Oct  7 05:08:59 PM UTC 2025
+
+total 1.8G
+-rw-------+ 1 yangyk docker 374M Oct  7 17:06 backend-image.tar
+-rw-rw-rw-+ 1 yangyk docker  251 Oct  7 17:08 checksums.sha256
+-rw-rw-r--+ 1 yangyk docker 1.7K Oct  7 17:08 docker-compose.yml
+-rw-rw-rw-+ 1 yangyk docker  377 Oct  7 17:08 env.example
+-rw-------+ 1 yangyk docker 1.4G Oct  7 17:07 frontend-image.tar
+-rw-rw-rw-+ 1 yangyk docker  379 Oct  7 17:08 images-info.txt
+drwxrwsrwx+ 2 yangyk docker 4.0K Oct  7 17:08 nginx
+-rw-------+ 1 yangyk docker  52M Oct  7 17:07 nginx-image.tar

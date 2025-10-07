@@ -16,11 +16,17 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# 检查是否在项目根目录
-if [ ! -f "README.md" ] || [ ! -d "backend" ] || [ ! -d "frontend" ]; then
-    echo -e "${RED}错误: 请在项目根目录运行此脚本${NC}"
+# 获取项目根目录（deployment/local的上两级）
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# 检查是否在正确的位置
+if [ ! -f "$PROJECT_ROOT/README.md" ] || [ ! -d "$PROJECT_ROOT/backend" ] || [ ! -d "$PROJECT_ROOT/frontend" ]; then
+    echo -e "${RED}错误: 无法找到项目根目录${NC}"
     exit 1
 fi
+
+cd "$PROJECT_ROOT"
 
 # 1. 询问配置信息
 echo "请输入部署配置信息:"

@@ -1,6 +1,9 @@
 """
 FastAPI主应用和路由
 """
+from dotenv import load_dotenv
+load_dotenv()  # 必须在导入config之前加载环境变量
+
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -13,7 +16,7 @@ from datetime import timedelta
 import os
 import json
 
-from database import get_db, init_db, UserConfig, User, MessageFeedback, Message, Conversation, ModelUsage
+from database import get_db, init_db, UserConfig, User, MessageFeedback, Message, Conversation, ModelUsage, SessionLocal
 from conversation_service import conversation_service
 from config import HOST, PORT
 from auth import (
@@ -138,6 +141,44 @@ class FeedbackRequest(BaseModel):
 async def startup_event():
     init_db()
     print("数据库初始化完成")
+
+    # 自动创建默认超级管理员（如果不存在）
+    db = SessionLocal()
+    try:
+        # 检查是否存在admin用户
+        admin_user = db.query(User).filter(User.username == "admin").first()
+
+        if not admin_user:
+            print("检测到没有admin管理员，正在创建默认管理员...")
+            # 创建默认管理员
+            default_admin = User(
+                username="admin",
+                hashed_password=get_password_hash("Admin@2025"),
+                email="admin@example.com",
+                is_active=True,
+                is_admin=True
+            )
+            db.add(default_admin)
+            db.commit()
+            db.refresh(default_admin)
+
+            # 为管理员创建默认配置
+            admin_config = UserConfig(
+                user_id=default_admin.id,
+                current_model_type="glm",
+                max_tokens=8000
+            )
+            db.add(admin_config)
+            db.commit()
+
+            print("✅ 默认管理员创建成功 (用户名: admin, 密码: Admin@2025)")
+        else:
+            print(f"✓ 管理员账户已存在: {admin_user.username}")
+    except Exception as e:
+        print(f"⚠️  管理员初始化失败: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 
 # 预设模型配置

@@ -1,0 +1,20 @@
+[Unit]
+Description=LLM Chat System Frontend Service
+After=network.target
+
+[Service]
+Type=simple
+User=yangyk
+WorkingDirectory=/home/data2/yangyk/llm-chat-v1/frontend
+Environment="PATH=/usr/bin:/usr/local/bin"
+Environment="NODE_ENV=production"
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+
+# 日志配置
+StandardOutput=append:/home/data2/yangyk/llm-chat-v1/logs/frontend.log
+StandardError=append:/home/data2/yangyk/llm-chat-v1/logs/frontend-error.log
+
+[Install]
+WantedBy=multi-user.target

@@ -11,8 +11,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# 项目根目录
-PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+# 获取脚本所在目录和项目根目录
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOG_DIR="$PROJECT_ROOT/logs"
 BACKEND_PID_FILE="$LOG_DIR/backend.pid"
 FRONTEND_PID_FILE="$LOG_DIR/frontend.pid"
@@ -115,8 +116,8 @@ stop_frontend() {
         sleep 1
     fi
 
-    # 查找并清理可能的 node/npm 进程
-    NODE_PIDS=$(ps aux | grep "[n]ode.*next dev" | awk '{print $2}')
+    # 查找并清理可能的 Next.js 进程（开发和生产模式）
+    NODE_PIDS=$(ps aux | grep -E "[n]ode.*next|[n]ext-server|[n]pm.*start" | grep -v grep | awk '{print $2}')
     if [ ! -z "$NODE_PIDS" ]; then
         echo -e "${YELLOW}🔧 清理Next.js残留进程...${NC}"
         echo "$NODE_PIDS" | xargs kill -9 2>/dev/null || true
