@@ -181,24 +181,11 @@ async def startup_event():
         db.close()
 
 
-# 预设模型配置
-PRESET_MODELS = {
-    "codegeex": {
-        "name": "CodeGeex",
-        "url": "http://127.0.0.1:11551/v1/chat/completions",
-        "model": "codegeex4-all-9b",
-        "key": "codegeex"
-    },
-    "glm": {
-        "name": "GLM-4",
-        "url": "http://127.0.0.1:11553/v1/chat/completions",
-        "model": "glm4_32B_chat",
-        "key": "glm432b"
-    }
-}
+# 从配置文件导入预设模型配置
+from models_config import PRESET_MODELS, DEFAULT_MODEL_TYPE
 
-# 当前模型类型（默认使用glm）
-current_model_type = "glm"
+# 当前模型类型（默认使用配置文件中的DEFAULT_MODEL_TYPE）
+current_model_type = DEFAULT_MODEL_TYPE
 
 # 全局配置
 global_config = {

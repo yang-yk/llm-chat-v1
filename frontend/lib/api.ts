@@ -142,64 +142,120 @@ export async function sendMessage(request: ChatRequest): Promise<ChatResponse> {
 
 // 发送消息（流式）
 export async function* sendMessageStream(request: ChatRequest): AsyncGenerator<string> {
-  const response = await fetch(`${API_BASE_URL}/chat`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ ...request, stream: true }),
-  });
+  // 创建 AbortController 用于超时控制
+  const abortController = new AbortController();
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error('未登录或登录已过期');
+  // 设置总体请求超时时间（60秒）
+  const requestTimeout = setTimeout(() => {
+    abortController.abort();
+  }, 60000);
+
+  // 设置无数据接收超时时间（15秒）
+  // 如果15秒内没有收到任何数据，认为连接可能有问题
+  let dataTimeout: NodeJS.Timeout | undefined;
+  const resetDataTimeout = () => {
+    if (dataTimeout) {
+      clearTimeout(dataTimeout);
     }
-    throw new Error('发送消息失败');
-  }
+    dataTimeout = setTimeout(() => {
+      abortController.abort();
+    }, 15000);
+  };
 
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error('无法读取响应流');
-  }
+  try {
+    const response = await fetch(`${API_BASE_URL}/chat`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ ...request, stream: true }),
+      signal: abortController.signal,
+    });
 
-  const decoder = new TextDecoder();
-  let buffer = '';
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('未登录或登录已过期');
+      }
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+      // 尝试获取详细错误信息
+      let errorMessage = '发送消息失败';
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorMessage;
+      } catch {
+        // 如果无法解析，使用默认错误消息
+      }
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
+      throw new Error(errorMessage);
+    }
 
-    // 保留最后一个可能不完整的行
-    buffer = lines.pop() || '';
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('无法读取响应流');
+    }
 
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6).trim();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-        if (data === '[DONE]') {
-          return;
-        }
+    // 开始数据接收超时计时
+    resetDataTimeout();
 
-        try {
-          const parsed = JSON.parse(data);
+    while (true) {
+      const { done, value } = await reader.read();
 
-          if (parsed.error) {
-            throw new Error(parsed.error);
-          }
+      if (done) break;
 
-          if (parsed.done) {
+      // 收到数据，重置超时计时器
+      resetDataTimeout();
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+
+      // 保留最后一个可能不完整的行
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+
+          if (data === '[DONE]') {
             return;
           }
 
-          if (parsed.chunk) {
-            yield parsed.chunk;
+          try {
+            const parsed = JSON.parse(data);
+
+            if (parsed.error) {
+              console.error('[SSE ERROR]', parsed.error);
+              throw new Error(parsed.error);
+            }
+
+            if (parsed.done) {
+              return;
+            }
+
+            if (parsed.chunk) {
+              yield parsed.chunk;
+            }
+          } catch (e) {
+            // 如果是我们抛出的错误，继续抛出
+            if ((e as Error).message && !(e instanceof SyntaxError)) {
+              throw e;
+            }
+            // 忽略JSON解析错误
+            continue;
           }
-        } catch (e) {
-          // 忽略JSON解析错误
-          continue;
         }
       }
+    }
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new Error('请求超时：大模型服务响应时间过长或网络连接中断，请检查模型服务状态或稍后重试');
+    }
+    throw error;
+  } finally {
+    // 清理超时定时器
+    clearTimeout(requestTimeout);
+    if (dataTimeout) {
+      clearTimeout(dataTimeout);
     }
   }
 }
