@@ -145,13 +145,15 @@ export async function* sendMessageStream(request: ChatRequest): AsyncGenerator<s
   // 创建 AbortController 用于超时控制
   const abortController = new AbortController();
 
-  // 设置总体请求超时时间（60秒）
+  // 设置总体请求超时时间（10分钟）
+  // 这个时间设置得很长，仅用于防止极端异常情况，避免请求永久挂起
   const requestTimeout = setTimeout(() => {
     abortController.abort();
-  }, 60000);
+  }, 600000);
 
-  // 设置无数据接收超时时间（15秒）
-  // 如果15秒内没有收到任何数据，认为连接可能有问题
+  // 设置无数据接收超时时间（45秒）
+  // 只要大模型持续有流式输出，就会不断重置此计时器
+  // 只有当45秒内没有收到任何数据时，才认为连接可能有问题
   let dataTimeout: NodeJS.Timeout | undefined;
   const resetDataTimeout = () => {
     if (dataTimeout) {
@@ -159,7 +161,7 @@ export async function* sendMessageStream(request: ChatRequest): AsyncGenerator<s
     }
     dataTimeout = setTimeout(() => {
       abortController.abort();
-    }, 15000);
+    }, 45000);
   };
 
   try {
