@@ -89,3 +89,4 @@ deployment/docker/docker-build-cache/pip-cache/
 deployment/docker/docker-build-cache/npm-cache/
 deployment/docker/docker-build-cache/cache-manifest.txt
 deployment/docker/docker-build-cache/import-build-cache.sh
+backend/embeddings/models/Qwen3-Embedding-0.6B/model.safetensors

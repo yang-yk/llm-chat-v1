@@ -14,3 +14,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./conversation.db")
 # 服务器配置
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
+
+# Embedding配置
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "qwen")  # 使用 Qwen3-Embedding-0.6B 模型
+EMBEDDING_DEVICE = os.getenv("EMBEDDING_DEVICE", "auto")  # 选项: "cuda", "cpu", "auto"

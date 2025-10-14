@@ -10,6 +10,7 @@ import {
   toggleUserStatus,
   setUserAdmin,
   getAdminModelStats,
+  getAdminKnowledgeBaseStats,
 } from '@/lib/api';
 
 interface SystemStats {
@@ -77,6 +78,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [modelStats, setModelStats] = useState<ModelStats | null>(null);
+  const [kbStats, setKbStats] = useState<any>(null);
   const [users, setUsers] = useState<UserInfo[]>([]);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showUserDetail, setShowUserDetail] = useState(false);
@@ -107,10 +109,11 @@ export default function AdminPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [statsData, usersData, modelStatsData] = await Promise.all([
+      const [statsData, usersData, modelStatsData, kbStatsData] = await Promise.all([
         getAdminStats(),
         getAdminUsers(),
         getAdminModelStats(),
+        getAdminKnowledgeBaseStats(),
       ]);
       setStats(statsData);
 
@@ -130,6 +133,7 @@ export default function AdminPage() {
 
       setUsers(sortedUsers);
       setModelStats(modelStatsData);
+      setKbStats(kbStatsData);
     } catch (error) {
       console.error('加载数据失败:', error);
       alert('加载数据失败');
@@ -381,6 +385,44 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* 知识库统计 */}
+        {kbStats && (
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">知识库统计</h2>
+
+            {/* 总体统计 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">知识库总数</p>
+                    <p className="mt-2 text-3xl font-semibold text-gray-900">{kbStats.total_knowledge_bases}</p>
+                  </div>
+                  <div className="p-3 bg-teal-100 rounded-full">
+                    <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">文档总数</p>
+                    <p className="mt-2 text-3xl font-semibold text-gray-900">{kbStats.total_documents}</p>
+                  </div>
+                  <div className="p-3 bg-orange-100 rounded-full">
+                    <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 用户列表 */}
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
@@ -613,19 +655,56 @@ export default function AdminPage() {
                   </div>
                 </div>
 
+                <h4 className="text-md font-semibold text-gray-900 mb-4">知识库列表</h4>
+                <div className="space-y-2 mb-6">
+                  {selectedUser.knowledge_bases && selectedUser.knowledge_bases.length > 0 ? (
+                    selectedUser.knowledge_bases.map((kb: any) => (
+                      <div key={kb.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{kb.name}</p>
+                            {kb.description && (
+                              <p className="text-xs text-gray-600 mt-1">{kb.description}</p>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 ml-2">{formatDate(kb.updated_at)}</p>
+                        </div>
+                        <div className="flex items-center justify-between text-xs mt-2">
+                          <span className="text-gray-500">文档: {kb.doc_count}</span>
+                          <div className="flex gap-2">
+                            <span className="text-green-600">完成: {kb.completed_count}</span>
+                            {kb.processing_count > 0 && (
+                              <span className="text-yellow-600">处理中: {kb.processing_count}</span>
+                            )}
+                            {kb.failed_count > 0 && (
+                              <span className="text-red-600">失败: {kb.failed_count}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-4">暂无知识库</p>
+                  )}
+                </div>
+
                 <h4 className="text-md font-semibold text-gray-900 mb-4">对话列表</h4>
                 <div className="space-y-2">
-                  {selectedUser.conversations.map((conv: any) => (
-                    <div key={conv.id} className="p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{conv.title}</p>
-                          <p className="text-xs text-gray-500">{conv.message_count} 条消息</p>
+                  {selectedUser.conversations && selectedUser.conversations.length > 0 ? (
+                    selectedUser.conversations.map((conv: any) => (
+                      <div key={conv.id} className="p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{conv.title}</p>
+                            <p className="text-xs text-gray-500">{conv.message_count} 条消息</p>
+                          </div>
+                          <p className="text-xs text-gray-500">{formatDate(conv.updated_at)}</p>
                         </div>
-                        <p className="text-xs text-gray-500">{formatDate(conv.updated_at)}</p>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-4">暂无对话</p>
+                  )}
                 </div>
               </div>
             </div>

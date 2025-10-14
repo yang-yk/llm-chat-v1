@@ -7,7 +7,7 @@ import ChatMessages from '@/components/ChatMessages';
 import MessageInput from '@/components/MessageInput';
 import SettingsModal from '@/components/SettingsModal';
 import ExportMenu from '@/components/ExportMenu';
-import type { Conversation, Message, ConfigResponse } from '@/lib/types';
+import type { Conversation, Message, ConfigResponse, KnowledgeBase, KnowledgeSource } from '@/lib/types';
 import {
   getUserId,
   getUser,
@@ -24,6 +24,10 @@ import {
   deleteFeedback,
   checkAdminPermission,
   getMyModelStats,
+  getKnowledgeBases,
+  uploadTempDocument,
+  deleteTempDocument,
+  chatWithTempDocStream,
 } from '@/lib/api';
 
 export default function Home() {
@@ -42,6 +46,10 @@ export default function Home() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showModelStats, setShowModelStats] = useState(false);
   const [modelStats, setModelStats] = useState<any>(null);
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
+  const [currentSources, setCurrentSources] = useState<KnowledgeSource[]>([]);
+  const [uploadedFile, setUploadedFile] = useState<{ filename: string; docId: string } | null>(null);
+  const [isFileUploading, setIsFileUploading] = useState(false);
 
   useEffect(() => {
     // 检查用户是否登录
@@ -66,8 +74,31 @@ export default function Home() {
       loadConversations();
       loadConfig();
       checkAdmin();
+      loadKnowledgeBases();
     }
   }, [router]);
+
+  const loadKnowledgeBases = async () => {
+    try {
+      const kbs = await getKnowledgeBases();
+      setKnowledgeBases(kbs);
+    } catch (error) {
+      console.error('加载知识库列表失败:', error);
+      // 不阻塞用户使用，只是没有知识库功能
+    }
+  };
+
+  // 定期刷新知识库列表，以更新文档处理状态
+  useEffect(() => {
+    if (!userId) return;
+
+    // 每5秒刷新一次知识库列表
+    const interval = setInterval(() => {
+      loadKnowledgeBases();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [userId]);
 
   const checkAdmin = async () => {
     try {
@@ -177,17 +208,79 @@ export default function Home() {
     }
   };
 
-  const handleSendMessage = async (message: string) => {
+  const handleSendMessage = async (message: string, knowledgeBaseIds?: number[]) => {
     if (!currentSessionId) {
       // 如果还是没有会话（创建失败），提示用户
       alert('创建对话失败，请重试');
       return;
     }
 
+    // 如果有上传的临时文档，使用临时文档问答
+    if (uploadedFile) {
+      // 添加用户消息
+      const userMessage: Message = { role: 'user', content: message };
+      setMessages((prev) => [...prev, userMessage]);
+      setIsLoading(true);
+
+      // 创建新的 AbortController
+      const controller = new AbortController();
+      setAbortController(controller);
+
+      try {
+        let assistantContent = '';
+        const assistantMessage: Message = { role: 'assistant', content: '' };
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        // 使用临时文档问答流式响应
+        for await (const event of chatWithTempDocStream(uploadedFile.docId, message)) {
+          // 检查是否被取消
+          if (controller.signal.aborted) {
+            break;
+          }
+
+          if (event.type === 'chunk') {
+            assistantContent += event.data;
+            setMessages((prev) => {
+              const newMessages = [...prev];
+              newMessages[newMessages.length - 1] = {
+                role: 'assistant',
+                content: assistantContent,
+              };
+              return newMessages;
+            });
+          } else if (event.type === 'error') {
+            throw new Error(event.data);
+          }
+        }
+      } catch (error) {
+        // 如果是用户主动取消，不显示错误
+        if ((error as Error).name === 'AbortError') {
+          console.log('用户已停止生成');
+        } else {
+          console.error('临时文档问答失败:', error);
+          const errorMessage = (error as Error).message || '未知错误';
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1] = {
+              role: 'assistant',
+              content: `⚠️ **文档问答出错**\n\n抱歉，在处理您的文档问题时遇到了问题。\n\n**错误信息：** ${errorMessage}\n\n**建议：**\n- 请稍后重试\n- 检查文档是否正常上传\n- 如问题持续，请重新上传文档`,
+            };
+            return newMessages;
+          });
+        }
+      } finally {
+        setIsLoading(false);
+        setAbortController(null);
+      }
+      return;
+    }
+
+    // 正常的对话流程（知识库或普通对话）
     // 添加用户消息
     const userMessage: Message = { role: 'user', content: message };
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
+    setCurrentSources([]); // 清空之前的引用
 
     // 创建新的 AbortController
     const controller = new AbortController();
@@ -195,39 +288,59 @@ export default function Home() {
 
     try {
       let assistantContent = '';
+      let assistantSources: KnowledgeSource[] = [];
       const assistantMessage: Message = { role: 'assistant', content: '' };
       setMessages((prev) => [...prev, assistantMessage]);
 
       // 使用流式响应
-      for await (const chunk of sendMessageStream({
+      for await (const item of sendMessageStream({
         user_id: userId,
         session_id: currentSessionId,
         message,
         stream: true,
+        knowledge_base_ids: knowledgeBaseIds,
       })) {
         // 检查是否被取消
         if (controller.signal.aborted) {
           break;
         }
 
-        assistantContent += chunk;
-        setMessages((prev) => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1] = {
-            role: 'assistant',
-            content: assistantContent,
-          };
-          return newMessages;
-        });
+        // 处理引用来源
+        if (item.type === 'sources') {
+          assistantSources = item.data;
+          console.log('收到引用来源：', item.data);
+          // 更新消息，附加引用来源
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1] = {
+              role: 'assistant',
+              content: assistantContent,
+              sources: assistantSources,
+            };
+            return newMessages;
+          });
+        }
+        // 处理内容chunk
+        else if (item.type === 'chunk') {
+          assistantContent += item.data;
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1] = {
+              role: 'assistant',
+              content: assistantContent,
+              sources: assistantSources,
+            };
+            return newMessages;
+          });
+        }
       }
 
       // 刷新对话列表以更新标题和消息数
       await loadConversations();
 
-      // 重新加载对话历史以获取消息ID（用于点赞点踩功能）
-      if (currentSessionId) {
-        await loadConversationHistory(currentSessionId);
-      }
+      // 注意：不重新加载历史记录，以保留sources
+      // sources已在流式响应中附加到消息，重新加载会覆盖它们
+      // 消息ID会在下次切换对话时自动加载
     } catch (error) {
       // 如果是用户主动取消，不显示错误
       if ((error as Error).name === 'AbortError') {
@@ -317,10 +430,9 @@ export default function Home() {
       // 刷新对话列表以更新标题和消息数
       await loadConversations();
 
-      // 重新加载对话历史以获取消息ID（用于点赞点踩功能）
-      if (currentSessionId) {
-        await loadConversationHistory(currentSessionId);
-      }
+      // 注意：不重新加载历史记录，以保留sources（如果有RAG的话）
+      // 重新生成时不使用知识库，所以没有sources，但为了一致性也不重新加载
+      // 消息ID会在下次切换对话时自动加载
     } catch (error) {
       // 如果是用户主动取消，不显示错误
       if ((error as Error).name === 'AbortError') {
@@ -427,6 +539,49 @@ export default function Home() {
     }
   };
 
+  const handleFileUpload = async (file: File) => {
+    const fileType = file.name.split('.').pop()?.toLowerCase();
+
+    if (!['txt', 'pdf', 'doc', 'docx'].includes(fileType || '')) {
+      alert('仅支持 txt, pdf, doc, docx 格式的文件');
+      return;
+    }
+
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (file.size > maxSize) {
+      alert('文件大小不能超过 50MB');
+      return;
+    }
+
+    setIsFileUploading(true);
+    try {
+      const result = await uploadTempDocument(file);
+      setUploadedFile({
+        filename: result.doc_info.filename,
+        docId: result.doc_id,
+      });
+      // 静默上传，不显示提示
+    } catch (error: any) {
+      console.error('上传文件失败:', error);
+      alert(`上传失败：${error.message || '未知错误'}`);
+    } finally {
+      setIsFileUploading(false);
+    }
+  };
+
+  const handleFileRemove = async () => {
+    if (!uploadedFile) return;
+
+    // 静默删除，不需要确认
+    try {
+      await deleteTempDocument(uploadedFile.docId);
+      setUploadedFile(null);
+    } catch (error: any) {
+      console.error('删除文件失败:', error);
+      alert(`删除失败：${error.message || '未知错误'}`);
+    }
+  };
+
   // 认证检查中，显示加载状态
   if (isAuthChecking) {
     return (
@@ -483,6 +638,18 @@ export default function Home() {
                 </svg>
                 <span className="text-sm text-gray-700 font-medium">{userName}</span>
               </div>
+
+              {/* 知识库入口 */}
+              <button
+                onClick={() => window.open('/knowledge', '_blank')}
+                className="px-2 sm:px-4 py-2 bg-indigo-600 text-white rounded-lg transition-all text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 shadow-sm hover:bg-indigo-700 hover:shadow"
+                title="知识库管理"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <span className="hidden sm:inline">知识库</span>
+              </button>
 
               {/* 管理后台入口 - 仅管理员可见 */}
               {isAdmin && (
@@ -561,6 +728,7 @@ export default function Home() {
           </div>
         </header>
 
+
         <ChatMessages messages={messages} isLoading={isLoading} onRegenerate={handleRegenerate} />
         <MessageInput
           onSendMessage={handleSendMessage}
@@ -568,6 +736,11 @@ export default function Home() {
           onStopGeneration={handleStopGeneration}
           disabled={isLoading}
           isGenerating={isLoading}
+          knowledgeBases={knowledgeBases}
+          uploadedFile={uploadedFile}
+          onFileUpload={handleFileUpload}
+          onFileRemove={handleFileRemove}
+          isFileUploading={isFileUploading}
         />
       </main>
 

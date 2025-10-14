@@ -8,3 +8,15 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 python-jose[cryptography]==3.3.0
 python-multipart==0.0.9
+
+# 知识库相关依赖
+PyPDF2==3.0.1
+python-docx==1.1.0
+olefile==0.47
+docx2txt==0.9
+
+# Embedding相关依赖（Qwen3-Embedding-0.6B）
+torch>=2.0.0
+transformers>=4.40.0
+sentence-transformers>=2.5.0
+protobuf>=3.20.0

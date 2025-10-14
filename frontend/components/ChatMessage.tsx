@@ -17,6 +17,7 @@ export default function ChatMessage({ message, onRegenerate }: ChatMessageProps)
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<'like' | 'dislike' | null>(null);
+  const [sourceExpanded, setSourceExpanded] = useState(false);
 
   // 获取消息的反馈状态
   useEffect(() => {
@@ -251,9 +252,55 @@ export default function ChatMessage({ message, onRegenerate }: ChatMessageProps)
                 )}
               </button>
             ) : (
-              <div className="mt-2 flex items-center gap-2">
-                {/* 复制按钮 */}
-                <button
+              <>
+                {/* 引用来源显示区域 */}
+                {message.sources && message.sources.length > 0 && (
+                  <div className="mt-3 mb-2">
+                    <button
+                      onClick={() => setSourceExpanded(!sourceExpanded)}
+                      className="w-full text-left px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-all text-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                          </svg>
+                          <span className="font-medium text-blue-900">
+                            📚 引用来源: {message.sources[0].document_name}
+                          </span>
+                          <span className="text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
+                            相似度 {(message.sources[0].similarity * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <svg
+                          className={`w-4 h-4 text-blue-600 transition-transform ${sourceExpanded ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </button>
+
+                    {/* 展开的内容 */}
+                    {sourceExpanded && message.sources[0].content && (
+                      <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs">
+                        <div className="text-gray-600 mb-1 font-medium">引用内容：</div>
+                        <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                          {message.sources[0].content}
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-gray-300 text-gray-500 text-xs">
+                          来源: {message.sources[0].knowledge_base_name} • 文本块 #{message.sources[0].chunk_index + 1}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-2 flex items-center gap-2">
+                  {/* 复制按钮 */}
+                  <button
                   onClick={handleCopyMessage}
                   className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 rounded-md text-xs border border-gray-300 flex items-center gap-1.5"
                   title="复制内容"
@@ -316,7 +363,8 @@ export default function ChatMessage({ message, onRegenerate }: ChatMessageProps)
                   </svg>
                   {feedback === 'dislike' && <span className="font-medium">已点踩</span>}
                 </button>
-              </div>
+                </div>
+              </>
             )}
           </div>
         </div>

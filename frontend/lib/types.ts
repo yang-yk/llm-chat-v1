@@ -3,6 +3,7 @@ export interface Message {
   id?: number;
   role: 'user' | 'assistant';
   content: string;
+  sources?: KnowledgeSource[];  // 引用来源（仅AI消息）
 }
 
 export interface Conversation {
@@ -20,6 +21,7 @@ export interface ChatRequest {
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
+  knowledge_base_ids?: number[];  // 要使用的知识库ID列表
 }
 
 export interface ChatResponse {
@@ -57,4 +59,53 @@ export interface ConfigUpdateRequest {
   llm_model?: string;
   llm_api_key?: string;
   max_tokens?: number;
+}
+
+// 知识库相关类型
+export interface KnowledgeBase {
+  id: number;
+  name: string;
+  description?: string;
+  document_count: number;
+  has_processing_docs: boolean;  // 是否有正在处理中的文档
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeSource {
+  knowledge_base_name: string;
+  document_name: string;
+  similarity: number;
+  chunk_index: number;
+  content?: string;  // 匹配的文本内容（可选）
+}
+
+export interface Document {
+  id: number;
+  filename: string;
+  file_type: string;
+  file_size: number;
+  status: 'processing' | 'completed' | 'failed';
+  error_message?: string;
+  chunk_count: number;
+  created_at: string;
+}
+
+export interface KnowledgeBaseDetail {
+  id: number;
+  name: string;
+  description?: string;
+  documents: Document[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeBaseCreateRequest {
+  name: string;
+  description?: string;
+}
+
+export interface KnowledgeBaseUpdateRequest {
+  name?: string;
+  description?: string;
 }

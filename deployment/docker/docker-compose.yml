@@ -25,6 +25,8 @@ services:
       - ../../db:/app/db
       # 挂载宿主机日志目录
       - ../../logs:/app/logs
+      # 挂载宿主机上传文件目录（知识库文档）
+      - ../../backend/uploads:/app/uploads
     restart: unless-stopped
 
   # 前端服务

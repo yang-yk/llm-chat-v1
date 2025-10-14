@@ -59,6 +59,7 @@ class Message(Base):
     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
     role = Column(String(20), nullable=False)  # user 或 assistant
     content = Column(Text, nullable=False)
+    sources = Column(Text, nullable=True)  # 引用来源（JSON格式，仅AI消息）
     created_at = Column(DateTime, default=get_beijing_time)
 
     # 关联会话
@@ -117,6 +118,57 @@ class ModelUsage(Base):
     # 关联用户和对话
     user = relationship("User")
     conversation = relationship("Conversation")
+
+
+class KnowledgeBase(Base):
+    """知识库表"""
+    __tablename__ = "knowledge_bases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # 所属用户ID
+    name = Column(String(200), nullable=False)  # 知识库名称
+    description = Column(Text, nullable=True)  # 知识库描述
+    created_at = Column(DateTime, default=get_beijing_time)
+    updated_at = Column(DateTime, default=get_beijing_time, onupdate=get_beijing_time)
+
+    # 关联用户和文档
+    user = relationship("User")
+    documents = relationship("Document", back_populates="knowledge_base", cascade="all, delete-orphan")
+
+
+class Document(Base):
+    """文档表"""
+    __tablename__ = "documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    knowledge_base_id = Column(Integer, ForeignKey("knowledge_bases.id"), nullable=False)  # 所属知识库ID
+    filename = Column(String(500), nullable=False)  # 文件名
+    file_type = Column(String(50), nullable=False)  # 文件类型: txt/pdf/doc/docx
+    file_size = Column(Integer, nullable=False)  # 文件大小（字节）
+    file_path = Column(String(1000), nullable=False)  # 文件存储路径
+    status = Column(String(50), default="processing")  # 处理状态: processing/completed/failed
+    error_message = Column(Text, nullable=True)  # 错误信息（如果处理失败）
+    created_at = Column(DateTime, default=get_beijing_time)
+    updated_at = Column(DateTime, default=get_beijing_time, onupdate=get_beijing_time)
+
+    # 关联知识库和文档块
+    knowledge_base = relationship("KnowledgeBase", back_populates="documents")
+    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+
+
+class DocumentChunk(Base):
+    """文档切片表（存储向量化后的文本块）"""
+    __tablename__ = "document_chunks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)  # 所属文档ID
+    chunk_index = Column(Integer, nullable=False)  # 切片序号
+    content = Column(Text, nullable=False)  # 文本内容
+    embedding = Column(Text, nullable=True)  # 向量表示（JSON格式存储）
+    created_at = Column(DateTime, default=get_beijing_time)
+
+    # 关联文档
+    document = relationship("Document", back_populates="chunks")
 
 
 # 创建数据库引擎

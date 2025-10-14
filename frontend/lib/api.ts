@@ -5,6 +5,11 @@ import type {
   ConversationHistoryResponse,
   ConfigResponse,
   ConfigUpdateRequest,
+  KnowledgeBase,
+  KnowledgeBaseDetail,
+  KnowledgeBaseCreateRequest,
+  KnowledgeBaseUpdateRequest,
+  Document,
 } from './types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -140,8 +145,8 @@ export async function sendMessage(request: ChatRequest): Promise<ChatResponse> {
   return response.json();
 }
 
-// 发送消息（流式）
-export async function* sendMessageStream(request: ChatRequest): AsyncGenerator<string> {
+// 发送消息（流式）- 返回内容chunk或引用来源
+export async function* sendMessageStream(request: ChatRequest): AsyncGenerator<{ type: 'chunk' | 'sources', data: any }> {
   // 创建 AbortController 用于超时控制
   const abortController = new AbortController();
 
@@ -234,8 +239,14 @@ export async function* sendMessageStream(request: ChatRequest): AsyncGenerator<s
               return;
             }
 
+            // 如果收到引用来源信息
+            if (parsed.sources) {
+              yield { type: 'sources', data: parsed.sources };
+            }
+
+            // 如果收到内容chunk
             if (parsed.chunk) {
-              yield parsed.chunk;
+              yield { type: 'chunk', data: parsed.chunk };
             }
           } catch (e) {
             // 如果是我们抛出的错误，继续抛出
@@ -516,6 +527,384 @@ export async function getMyModelStats(): Promise<any> {
 
   if (!response.ok) {
     throw new Error('获取模型统计失败');
+  }
+
+  return response.json();
+}
+
+// 获取所有用户的知识库统计信息（管理员）
+export async function getAdminKnowledgeBaseStats(): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/knowledge-bases`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('获取知识库统计失败');
+  }
+
+  return response.json();
+}
+
+// ==================== 知识库API ====================
+
+// 创建知识库
+export async function createKnowledgeBase(data: KnowledgeBaseCreateRequest): Promise<KnowledgeBase> {
+  const response = await fetch(`${API_BASE_URL}/api/knowledge-bases`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    // 尝试从响应中获取具体的错误信息
+    try {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || '创建知识库失败');
+    } catch (e) {
+      if (e instanceof Error && e.message !== '创建知识库失败') {
+        throw e;
+      }
+      throw new Error('创建知识库失败');
+    }
+  }
+
+  return response.json();
+}
+
+// 获取所有知识库
+export async function getKnowledgeBases(): Promise<KnowledgeBase[]> {
+  const response = await fetch(`${API_BASE_URL}/api/knowledge-bases`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    throw new Error('获取知识库列表失败');
+  }
+
+  const data = await response.json();
+  return data.knowledge_bases;
+}
+
+// 获取知识库详情
+export async function getKnowledgeBase(kbId: number): Promise<KnowledgeBaseDetail> {
+  const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 404) {
+      throw new Error('知识库不存在');
+    }
+    throw new Error('获取知识库详情失败');
+  }
+
+  return response.json();
+}
+
+// 更新知识库
+export async function updateKnowledgeBase(kbId: number, data: KnowledgeBaseUpdateRequest): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 404) {
+      throw new Error('知识库不存在');
+    }
+    // 尝试从响应中获取具体的错误信息
+    try {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || '更新知识库失败');
+    } catch (e) {
+      if (e instanceof Error && e.message !== '更新知识库失败') {
+        throw e;
+      }
+      throw new Error('更新知识库失败');
+    }
+  }
+}
+
+// 删除知识库
+export async function deleteKnowledgeBase(kbId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 404) {
+      throw new Error('知识库不存在');
+    }
+    throw new Error('删除知识库失败');
+  }
+}
+
+// 上传文档到知识库
+export async function uploadDocument(kbId: number, file: File): Promise<Document> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}/documents`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 400) {
+      const error = await response.json();
+      throw new Error(error.detail || '不支持的文件类型');
+    }
+    throw new Error('上传文档失败');
+  }
+
+  return response.json();
+}
+
+// 获取知识库的所有文档
+export async function getDocuments(kbId: number): Promise<Document[]> {
+  const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}/documents`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    throw new Error('获取文档列表失败');
+  }
+
+  const data = await response.json();
+  return data.documents;
+}
+
+// 删除文档
+export async function deleteDocument(docId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/documents/${docId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 404) {
+      throw new Error('文档不存在');
+    }
+    throw new Error('删除文档失败');
+  }
+}
+
+// ==================== 临时文档问答API ====================
+
+// 上传临时文档
+export async function uploadTempDocument(file: File): Promise<{
+  doc_id: string;
+  doc_info: any;
+}> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}/api/temp-docs/upload`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 400) {
+      const error = await response.json();
+      throw new Error(error.detail || '文件上传失败');
+    }
+    const error = await response.json();
+    throw new Error(error.detail || '上传文档失败');
+  }
+
+  return response.json();
+}
+
+// 与临时文档对话（流式）
+export async function* chatWithTempDocStream(
+  docId: string,
+  message: string,
+  temperature: number = 0.7
+): AsyncGenerator<{ type: 'chunk' | 'source' | 'error', data: any }> {
+  const abortController = new AbortController();
+  const requestTimeout = setTimeout(() => {
+    abortController.abort();
+  }, 600000); // 10分钟总超时
+
+  let dataTimeout: NodeJS.Timeout | undefined;
+  const resetDataTimeout = () => {
+    if (dataTimeout) {
+      clearTimeout(dataTimeout);
+    }
+    dataTimeout = setTimeout(() => {
+      abortController.abort();
+    }, 45000); // 45秒无数据超时
+  };
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/temp-docs/${docId}/chat`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        doc_id: docId,
+        message,
+        temperature,
+      }),
+      signal: abortController.signal,
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('未登录或登录已过期');
+      }
+      if (response.status === 404) {
+        throw new Error('文档不存在或已过期');
+      }
+      const error = await response.json();
+      throw new Error(error.detail || '问答失败');
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('无法读取响应流');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    resetDataTimeout();
+
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) break;
+
+      resetDataTimeout();
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+
+          if (data === '[DONE]') {
+            return;
+          }
+
+          try {
+            const parsed = JSON.parse(data);
+
+            if (parsed.error) {
+              yield { type: 'error', data: parsed.error };
+              return;
+            }
+
+            if (parsed.done) {
+              return;
+            }
+
+            if (parsed.source) {
+              yield { type: 'source', data: parsed.source };
+            }
+
+            if (parsed.chunk) {
+              yield { type: 'chunk', data: parsed.chunk };
+            }
+          } catch (e) {
+            if ((e as Error).message && !(e instanceof SyntaxError)) {
+              throw e;
+            }
+            continue;
+          }
+        }
+      }
+    }
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new Error('请求超时：服务响应时间过长，请稍后重试');
+    }
+    throw error;
+  } finally {
+    clearTimeout(requestTimeout);
+    if (dataTimeout) {
+      clearTimeout(dataTimeout);
+    }
+  }
+}
+
+// 删除临时文档
+export async function deleteTempDocument(docId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/temp-docs/${docId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 404) {
+      throw new Error('文档不存在或已过期');
+    }
+    throw new Error('删除文档失败');
+  }
+}
+
+// 获取临时文档信息
+export async function getTempDocumentInfo(docId: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/temp-docs/${docId}`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 404) {
+      throw new Error('文档不存在或已过期');
+    }
+    throw new Error('获取文档信息失败');
   }
 
   return response.json();

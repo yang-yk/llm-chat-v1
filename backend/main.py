@@ -4,7 +4,7 @@ FastAPI主应用和路由
 from dotenv import load_dotenv
 load_dotenv()  # 必须在导入config之前加载环境变量
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
@@ -35,8 +35,12 @@ from admin_service import (
     toggle_user_status,
     set_user_admin,
     get_overall_model_stats,
-    get_user_model_stats
+    get_user_model_stats,
+    get_all_knowledge_base_stats
 )
+from knowledge_base_service import knowledge_base_service
+from rag_service import rag_service
+from temp_doc_service import temp_doc_service
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -68,6 +72,7 @@ class ChatRequest(BaseModel):
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = None  # 如果为None,使用用户配置的max_tokens
     stream: Optional[bool] = False  # 是否使用流式响应
+    knowledge_base_ids: Optional[List[int]] = None  # 要使用的知识库ID列表
 
 
 class ChatResponse(BaseModel):
@@ -80,6 +85,7 @@ class MessageResponse(BaseModel):
     id: int
     role: str
     content: str
+    sources: Optional[List[Dict[str, Any]]] = None  # 引用来源（仅AI消息）
 
 
 class ConversationHistoryResponse(BaseModel):
@@ -134,6 +140,24 @@ class UserResponse(BaseModel):
 class FeedbackRequest(BaseModel):
     message_id: int
     feedback_type: str  # 'like' 或 'dislike'
+
+
+# 知识库相关模型
+class KnowledgeBaseCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class KnowledgeBaseUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+# 临时文档问答相关模型
+class TempDocChatRequest(BaseModel):
+    doc_id: str
+    message: str
+    temperature: Optional[float] = 0.7
 
 
 # 启动事件：初始化数据库
@@ -444,24 +468,89 @@ async def chat(
 
         print(f"[MODEL CONFIG] API: {llm_service.api_url}, Model: {llm_service.model}")
 
+        # 处理RAG：如果指定了知识库，则检索相关内容
+        rag_context = ""
+        search_results = []
+        if request.knowledge_base_ids and len(request.knowledge_base_ids) > 0:
+            try:
+                print(f"[RAG] 用户选择了知识库: {request.knowledge_base_ids}")
+                print(f"[RAG] 查询内容: {request.message}")
+                rag_context, search_results = await rag_service.retrieve_and_format(
+                    db=db,
+                    query=request.message,
+                    kb_ids=request.knowledge_base_ids,
+                    user_id=current_user.id,
+                    top_k=10  # 增加返回结果数量
+                )
+                if rag_context:
+                    print(f"[RAG] ✓ 成功检索到 {len(search_results)} 个相关文档块")
+                else:
+                    print(f"[RAG] ✗ 没有检索到相关内容")
+            except Exception as e:
+                print(f"[RAG ERROR] 检索失败: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                # RAG失败不影响对话继续
+
+        # 如果有RAG上下文，构建增强的提示词
+        enhanced_message = request.message
+        if rag_context:
+            enhanced_message = rag_service.build_rag_prompt(rag_context, request.message)
+            print(f"[RAG] 使用增强提示词，长度: {len(enhanced_message)}")
+
         # 如果请求流式响应
         if request.stream:
             async def event_generator():
                 """生成SSE事件流"""
                 try:
+                    # 先输出大模型回答
+                    print(f"[CHAT] 开始调用大模型，temperature={request.temperature}, max_tokens={max_tokens}")
                     chunk_count = 0
+                    assistant_response = ""
+
+                    # 如果有RAG结果，需要手动保存消息（带sources）
+                    has_rag = search_results and len(search_results) > 0
+
                     async for chunk in conversation_service.chat_stream(
                         db=db,
                         session_id=request.session_id,
-                        user_message=request.message,
+                        user_message=enhanced_message,  # 使用增强后的消息发送给LLM
                         temperature=request.temperature,
-                        max_tokens=max_tokens
+                        max_tokens=max_tokens,
+                        auto_save=not has_rag,  # 如果有RAG，不自动保存，后面手动保存带sources的消息
+                        save_user_message=request.message  # 但保存原始用户消息到数据库
                     ):
                         chunk_count += 1
+                        assistant_response += chunk
                         # 发送SSE格式的数据
                         yield f"data: {json.dumps({'chunk': chunk}, ensure_ascii=False)}\n\n"
 
-                    print(f"[STREAM COMPLETE] Sent {chunk_count} chunks")
+                        # 每100个chunk打印一次进度
+                        if chunk_count % 100 == 0:
+                            print(f"[CHAT] 已发送 {chunk_count} 个chunks...")
+
+                    print(f"[CHAT] ✓ 流式响应完成，共发送 {chunk_count} 个chunks")
+
+                    # 大模型回答完成后，处理引用来源
+                    sources = None
+                    if has_rag:
+                        # 只取第一个（相似度最高的）
+                        top_result = search_results[0]
+                        sources = [{
+                            "knowledge_base_name": top_result.get("knowledge_base_name", ""),
+                            "document_name": top_result.get("document_name", ""),
+                            "similarity": round(top_result.get("similarity", 0), 2),
+                            "chunk_index": top_result.get("chunk_index", 0),
+                            "content": top_result.get("content", "")  # 包含匹配的文本内容
+                        }]
+
+                        # 手动保存带sources的assistant消息
+                        conversation_service.save_message(db, request.session_id, "assistant", assistant_response, sources=sources)
+                        print(f"[RAG] 保存消息时附加引用来源: {top_result.get('document_name', 'unknown')}")
+
+                        # 发送引用来源信息给前端
+                        yield f"data: {json.dumps({'sources': sources}, ensure_ascii=False)}\n\n"
+                        print(f"[RAG] 发送引用来源: {top_result.get('document_name', 'unknown')}, 相似度: {top_result.get('similarity', 0):.3f}, 内容长度: {len(top_result.get('content', ''))} 字符")
 
                     # 记录模型调用
                     record_model_usage(db, current_user.id, request.session_id, model_type, model_name, api_url)
@@ -470,7 +559,9 @@ async def chat(
                     yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
 
                 except Exception as e:
-                    print(f"[STREAM ERROR] {str(e)}")
+                    print(f"[STREAM ERROR] 流式响应异常: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
                     # 发送错误信息
                     yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
 
@@ -489,7 +580,7 @@ async def chat(
             assistant_reply = await conversation_service.chat(
                 db=db,
                 session_id=request.session_id,
-                user_message=request.message,
+                user_message=enhanced_message,  # 使用增强后的消息
                 temperature=request.temperature,
                 max_tokens=max_tokens
             )
@@ -997,6 +1088,385 @@ async def admin_check_permission(
         "is_admin": current_user.is_admin,
         "username": current_user.username
     }
+
+
+@app.get("/api/admin/knowledge-bases")
+async def admin_get_knowledge_base_stats(
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """获取所有用户的知识库统计信息（需要管理员权限）"""
+    try:
+        stats = get_all_knowledge_base_stats(db)
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取知识库统计失败: {str(e)}")
+
+
+# ==================== 知识库管理API ====================
+
+@app.post("/api/knowledge-bases")
+async def create_knowledge_base(
+    kb_data: KnowledgeBaseCreate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """创建知识库"""
+    try:
+        kb = knowledge_base_service.create_knowledge_base(
+            db=db,
+            user_id=current_user.id,
+            name=kb_data.name,
+            description=kb_data.description
+        )
+        return {
+            "id": kb.id,
+            "name": kb.name,
+            "description": kb.description,
+            "created_at": kb.created_at.isoformat() if kb.created_at else None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/knowledge-bases")
+async def list_knowledge_bases(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """获取用户的所有知识库"""
+    try:
+        kbs = knowledge_base_service.get_knowledge_bases(db, current_user.id)
+        return {"knowledge_bases": kbs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/knowledge-bases/{kb_id}")
+async def get_knowledge_base(
+    kb_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """获取知识库详情"""
+    try:
+        kb = knowledge_base_service.get_knowledge_base(db, kb_id, current_user.id)
+        if not kb:
+            raise HTTPException(status_code=404, detail="知识库不存在")
+        return kb
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/knowledge-bases/{kb_id}")
+async def update_knowledge_base(
+    kb_id: int,
+    kb_data: KnowledgeBaseUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """更新知识库"""
+    try:
+        kb = knowledge_base_service.update_knowledge_base(
+            db=db,
+            kb_id=kb_id,
+            user_id=current_user.id,
+            name=kb_data.name,
+            description=kb_data.description
+        )
+        if not kb:
+            raise HTTPException(status_code=404, detail="知识库不存在")
+        return {
+            "id": kb.id,
+            "name": kb.name,
+            "description": kb.description,
+            "updated_at": kb.updated_at.isoformat() if kb.updated_at else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/knowledge-bases/{kb_id}")
+async def delete_knowledge_base(
+    kb_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """删除知识库"""
+    try:
+        success = knowledge_base_service.delete_knowledge_base(db, kb_id, current_user.id)
+        if not success:
+            raise HTTPException(status_code=404, detail="知识库不存在")
+        return {"message": "知识库已删除"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/knowledge-bases/{kb_id}/documents")
+async def upload_document(
+    kb_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """上传文档到知识库"""
+    try:
+        # 验证文件类型
+        filename = file.filename
+        if not filename:
+            raise HTTPException(status_code=400, detail="文件名不能为空")
+
+        # 获取文件扩展名
+        file_ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+        if file_ext not in ['txt', 'pdf', 'doc', 'docx']:
+            raise HTTPException(status_code=400, detail=f"不支持的文件类型: {file_ext}")
+
+        # 读取文件内容
+        file_content = await file.read()
+
+        # 添加文档
+        doc = await knowledge_base_service.add_document(
+            db=db,
+            kb_id=kb_id,
+            user_id=current_user.id,
+            filename=filename,
+            file_content=file_content,
+            file_type=file_ext
+        )
+
+        return {
+            "id": doc.id,
+            "filename": doc.filename,
+            "file_type": doc.file_type,
+            "file_size": doc.file_size,
+            "status": doc.status,
+            "created_at": doc.created_at.isoformat() if doc.created_at else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"上传文档失败: {str(e)}")
+
+
+@app.get("/api/knowledge-bases/{kb_id}/documents")
+async def list_documents(
+    kb_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """获取知识库的所有文档"""
+    try:
+        documents = knowledge_base_service.get_documents(db, kb_id, current_user.id)
+        return {"documents": documents}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/documents/{doc_id}")
+async def delete_document(
+    doc_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """删除文档"""
+    try:
+        success = knowledge_base_service.delete_document(db, doc_id, current_user.id)
+        if not success:
+            raise HTTPException(status_code=404, detail="文档不存在")
+        return {"message": "文档已删除"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 临时文档问答API ====================
+
+@app.post("/api/temp-docs/upload")
+async def upload_temp_document(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user)
+):
+    """上传临时文档并解析"""
+    try:
+        # 验证文件名
+        filename = file.filename
+        if not filename:
+            raise HTTPException(status_code=400, detail="文件名不能为空")
+
+        # 读取文件内容
+        file_content = await file.read()
+        if len(file_content) == 0:
+            raise HTTPException(status_code=400, detail="文件内容为空")
+
+        # 上传并解析文档
+        doc_id, doc_info = await temp_doc_service.upload_and_parse(filename, file_content)
+
+        return {
+            "message": "文档上传成功",
+            "doc_id": doc_id,
+            "doc_info": doc_info
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[ERROR] 上传临时文档失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"上传文档失败: {str(e)}")
+
+
+@app.post("/api/temp-docs/{doc_id}/chat")
+async def chat_with_temp_doc(
+    doc_id: str,
+    request: TempDocChatRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """基于临时文档进行问答（支持流式响应）"""
+    try:
+        from llm_service import llm_service
+
+        print(f"\n[TEMP DOC CHAT] doc_id: {doc_id}, question: {request.message[:50]}...")
+
+        # 获取用户配置
+        user_config = db.query(UserConfig).filter_by(user_id=current_user.id).first()
+
+        # 配置LLM服务
+        if user_config:
+            model_type = user_config.current_model_type
+            if model_type == "codegeex":
+                llm_service.api_url = PRESET_MODELS["codegeex"]["url"]
+                llm_service.model = PRESET_MODELS["codegeex"]["model"]
+                llm_service.api_key = PRESET_MODELS["codegeex"]["key"]
+            elif model_type == "glm":
+                llm_service.api_url = PRESET_MODELS["glm"]["url"]
+                llm_service.model = PRESET_MODELS["glm"]["model"]
+                llm_service.api_key = PRESET_MODELS["glm"]["key"]
+            elif model_type == "custom":
+                llm_service.api_url = user_config.custom_api_url
+                llm_service.model = user_config.custom_model
+                llm_service.api_key = user_config.custom_api_key
+
+        # 检索相关文档内容
+        context, relevant_chunks = await temp_doc_service.search_relevant_chunks(
+            doc_id=doc_id,
+            query=request.message,
+            top_k=5,
+            max_context_length=24000  # 留出8k给问题和回答
+        )
+
+        # 构建提示词
+        if context:
+            prompt = f"""请基于以下文档内容回答问题。
+
+文档内容：
+{context}
+
+问题：{request.message}
+
+请根据文档内容给出详细、准确的回答。如果文档中没有相关信息，请明确说明。"""
+        else:
+            prompt = request.message
+
+        print(f"[TEMP DOC CHAT] 检索到的上下文长度: {len(context)}, 提示词总长度: {len(prompt)}")
+
+        # 流式响应
+        async def event_generator():
+            """生成SSE事件流"""
+            try:
+                chunk_count = 0
+                assistant_response = ""
+
+                # 调用LLM生成回答
+                async for chunk in llm_service.chat_completion_stream(
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=request.temperature,
+                    max_tokens=8000  # 为回答预留8k token
+                ):
+                    chunk_count += 1
+                    assistant_response += chunk
+                    # 发送SSE格式的数据
+                    yield f"data: {json.dumps({'chunk': chunk}, ensure_ascii=False)}\n\n"
+
+                    if chunk_count % 100 == 0:
+                        print(f"[TEMP DOC CHAT] 已发送 {chunk_count} 个chunks...")
+
+                print(f"[TEMP DOC CHAT] ✓ 流式响应完成，共发送 {chunk_count} 个chunks")
+
+                # 如果有引用来源，发送给前端
+                if relevant_chunks and len(relevant_chunks) > 0:
+                    top_chunk = relevant_chunks[0]
+                    source_info = {
+                        "similarity": round(top_chunk.get("similarity", 0), 2),
+                        "content_preview": top_chunk.get("content", "")[:200] + "..."
+                    }
+                    yield f"data: {json.dumps({'source': source_info}, ensure_ascii=False)}\n\n"
+
+                # 发送完成信号
+                yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
+
+            except Exception as e:
+                print(f"[TEMP DOC CHAT ERROR] 流式响应异常: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        print(f"[ERROR] 临时文档问答失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"问答失败: {str(e)}")
+
+
+@app.delete("/api/temp-docs/{doc_id}")
+async def delete_temp_document(
+    doc_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """删除临时文档"""
+    try:
+        success = temp_doc_service.delete_document(doc_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="文档不存在或已过期")
+        return {"message": "临时文档已删除"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除文档失败: {str(e)}")
+
+
+@app.get("/api/temp-docs/{doc_id}")
+async def get_temp_document_info(
+    doc_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """获取临时文档信息"""
+    try:
+        doc_info = temp_doc_service.get_document_info(doc_id)
+        return doc_info
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取文档信息失败: {str(e)}")
 
 
 # 主程序入口

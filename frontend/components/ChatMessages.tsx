@@ -23,7 +23,7 @@ export default function ChatMessages({ messages, isLoading, onRegenerate }: Chat
 
   if (messages.length === 0 && !isLoading) {
     return (
-      <div className="flex-1 flex items-start justify-center pt-20 p-8 bg-gradient-to-br from-blue-50/50 via-indigo-50/30 to-purple-50/50">
+      <div className="flex-1 flex items-start justify-center pt-20 p-8 bg-white">
         <div className="text-center max-w-xl">
           <div className="relative mb-8">
             <div className="text-6xl mb-4 animate-bounce inline-block">👋</div>

@@ -47,6 +47,8 @@ class ConversationService:
         Returns:
             消息列表，格式为 [{"role": "user", "content": "..."}] 或 [{"id": 1, "role": "user", "content": "..."}]
         """
+        import json
+
         conversation = db.query(Conversation).filter(Conversation.session_id == session_id).first()
         if not conversation:
             return []
@@ -54,12 +56,32 @@ class ConversationService:
         messages = db.query(Message).filter(Message.conversation_id == conversation.id).order_by(Message.created_at).all()
 
         if include_id:
-            return [{"id": msg.id, "role": msg.role, "content": msg.content} for msg in messages]
+            result = []
+            for msg in messages:
+                msg_dict = {"id": msg.id, "role": msg.role, "content": msg.content}
+                # 如果有sources字段，解析并添加
+                if msg.sources:
+                    try:
+                        msg_dict["sources"] = json.loads(msg.sources)
+                    except:
+                        pass
+                result.append(msg_dict)
+            return result
         else:
-            return [{"role": msg.role, "content": msg.content} for msg in messages]
+            result = []
+            for msg in messages:
+                msg_dict = {"role": msg.role, "content": msg.content}
+                # 如果有sources字段，解析并添加
+                if msg.sources:
+                    try:
+                        msg_dict["sources"] = json.loads(msg.sources)
+                    except:
+                        pass
+                result.append(msg_dict)
+            return result
 
     @staticmethod
-    def save_message(db: Session, session_id: str, role: str, content: str):
+    def save_message(db: Session, session_id: str, role: str, content: str, sources: Optional[List[Dict]] = None):
         """
         保存消息到数据库
 
@@ -68,12 +90,20 @@ class ConversationService:
             session_id: 会话ID
             role: 角色（user 或 assistant）
             content: 消息内容
+            sources: 引用来源（仅AI消息，可选）
         """
+        import json
+
         conversation = db.query(Conversation).filter(Conversation.session_id == session_id).first()
         if not conversation:
             raise ValueError(f"会话 {session_id} 不存在")
 
-        message = Message(conversation_id=conversation.id, role=role, content=content)
+        # 如果有sources，序列化为JSON字符串
+        sources_json = None
+        if sources:
+            sources_json = json.dumps(sources, ensure_ascii=False)
+
+        message = Message(conversation_id=conversation.id, role=role, content=content, sources=sources_json)
         db.add(message)
         db.commit()
 
@@ -158,16 +188,18 @@ class ConversationService:
         return assistant_reply
 
     @staticmethod
-    async def chat_stream(db: Session, session_id: str, user_message: str, temperature: float = 0.7, max_tokens: int = 2000) -> AsyncGenerator[str, None]:
+    async def chat_stream(db: Session, session_id: str, user_message: str, temperature: float = 0.7, max_tokens: int = 2000, auto_save: bool = True, save_user_message: str = None) -> AsyncGenerator[str, None]:
         """
         进行流式多轮对话
 
         Args:
             db: 数据库会话
             session_id: 会话ID
-            user_message: 用户消息
+            user_message: 用户消息（用于发送给LLM）
             temperature: 温度参数
             max_tokens: 最大生成token数
+            auto_save: 是否自动保存assistant消息（默认True，RAG场景下使用False）
+            save_user_message: 要保存到数据库的用户消息（如果为None，则使用user_message）
 
         Yields:
             逐步生成的文本片段
@@ -175,11 +207,12 @@ class ConversationService:
         # 获取历史对话
         history = ConversationService.get_conversation_history(db, session_id)
 
-        # 添加用户当前消息
+        # 添加用户当前消息到历史（用于LLM）
         history.append({"role": "user", "content": user_message})
 
-        # 保存用户消息
-        ConversationService.save_message(db, session_id, "user", user_message)
+        # 保存用户消息（使用save_user_message或user_message）
+        message_to_save = save_user_message if save_user_message is not None else user_message
+        ConversationService.save_message(db, session_id, "user", message_to_save)
 
         # 调用大模型API流式生成
         full_response = ""
@@ -187,8 +220,9 @@ class ConversationService:
             full_response += chunk
             yield chunk
 
-        # 保存完整的助手回复
-        ConversationService.save_message(db, session_id, "assistant", full_response)
+        # 如果auto_save=True，保存完整的助手回复
+        if auto_save:
+            ConversationService.save_message(db, session_id, "assistant", full_response)
 
         # 如果是第一轮对话，自动生成标题（同步执行确保生成）
         conversation = db.query(Conversation).filter(Conversation.session_id == session_id).first()

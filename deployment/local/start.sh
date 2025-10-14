@@ -141,16 +141,16 @@ start_backend() {
         exit 1
     fi
 
-    # 确定Python解释器路径（优先使用conda py38环境）
+    # 确定Python解释器路径（优先使用conda py310环境）
     PYTHON_CMD="python3"
     if command -v conda &> /dev/null; then
-        # 检查py38环境是否存在
-        if conda env list | grep -q "^py38 "; then
-            # 获取py38环境的Python路径
-            CONDA_PY38_PATH=$(conda env list | grep "^py38 " | awk '{print $NF}')/bin/python
-            if [ -x "$CONDA_PY38_PATH" ]; then
-                PYTHON_CMD="$CONDA_PY38_PATH"
-                echo -e "${YELLOW}📦 使用conda环境: py38${NC}"
+        # 检查py310环境是否存在
+        if conda env list | grep -q "^py310 "; then
+            # 获取py310环境的Python路径
+            CONDA_PY310_PATH=$(conda env list | grep "^py310 " | awk '{print $NF}')/bin/python
+            if [ -x "$CONDA_PY310_PATH" ]; then
+                PYTHON_CMD="$CONDA_PY310_PATH"
+                echo -e "${YELLOW}📦 使用conda环境: py310${NC}"
             fi
         fi
     fi

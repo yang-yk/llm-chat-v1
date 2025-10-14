@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
-from database import User, Conversation, Message, MessageFeedback, ModelUsage, get_beijing_time, BEIJING_TZ
+from database import User, Conversation, Message, MessageFeedback, ModelUsage, KnowledgeBase, Document, get_beijing_time, BEIJING_TZ
 
 
 def get_all_users_with_stats(db: Session) -> List[Dict[str, Any]]:
@@ -126,6 +126,46 @@ def get_user_detail(db: Session, user_id: int) -> Dict[str, Any]:
         MessageFeedback.feedback_type == "dislike"
     ).scalar()
 
+    # 知识库统计
+    knowledge_bases = db.query(KnowledgeBase).filter(
+        KnowledgeBase.user_id == user_id
+    ).all()
+
+    kb_details = []
+    for kb in knowledge_bases:
+        # 统计该知识库的文档数
+        kb_doc_count = db.query(func.count(Document.id)).filter(
+            Document.knowledge_base_id == kb.id
+        ).scalar()
+
+        # 统计处理中、已完成、失败的文档数
+        processing_count = db.query(func.count(Document.id)).filter(
+            Document.knowledge_base_id == kb.id,
+            Document.status == "processing"
+        ).scalar()
+
+        completed_count = db.query(func.count(Document.id)).filter(
+            Document.knowledge_base_id == kb.id,
+            Document.status == "completed"
+        ).scalar()
+
+        failed_count = db.query(func.count(Document.id)).filter(
+            Document.knowledge_base_id == kb.id,
+            Document.status == "failed"
+        ).scalar()
+
+        kb_details.append({
+            "id": kb.id,
+            "name": kb.name,
+            "description": kb.description,
+            "doc_count": kb_doc_count,
+            "processing_count": processing_count,
+            "completed_count": completed_count,
+            "failed_count": failed_count,
+            "created_at": kb.created_at.isoformat() if kb.created_at else None,
+            "updated_at": kb.updated_at.isoformat() if kb.updated_at else None
+        })
+
     return {
         "id": user.id,
         "username": user.username,
@@ -137,7 +177,8 @@ def get_user_detail(db: Session, user_id: int) -> Dict[str, Any]:
         "feedback_stats": {
             "like_count": like_count,
             "dislike_count": dislike_count
-        }
+        },
+        "knowledge_bases": kb_details
     }
 
 
@@ -367,4 +408,85 @@ def get_user_model_stats(db: Session, user_id: int) -> Dict[str, Any]:
         "last_usage": last_usage.created_at.isoformat() if last_usage else None,
         "by_type": by_type,
         "by_model": sorted(by_model, key=lambda x: x['count'], reverse=True)
+    }
+
+
+def get_all_knowledge_base_stats(db: Session) -> Dict[str, Any]:
+    """获取所有用户的知识库统计信息"""
+    # 获取所有用户
+    users = db.query(User).all()
+
+    user_kb_stats = []
+    total_kbs = 0
+    total_docs = 0
+
+    for user in users:
+        # 统计该用户的知识库数
+        kb_count = db.query(func.count(KnowledgeBase.id)).filter(
+            KnowledgeBase.user_id == user.id
+        ).scalar()
+
+        # 统计该用户的文档总数
+        doc_count = db.query(func.count(Document.id)).join(
+            KnowledgeBase
+        ).filter(
+            KnowledgeBase.user_id == user.id
+        ).scalar()
+
+        # 获取该用户的知识库详情
+        knowledge_bases = db.query(KnowledgeBase).filter(
+            KnowledgeBase.user_id == user.id
+        ).all()
+
+        kb_details = []
+        for kb in knowledge_bases:
+            # 统计该知识库的文档数
+            kb_doc_count = db.query(func.count(Document.id)).filter(
+                Document.knowledge_base_id == kb.id
+            ).scalar()
+
+            # 统计处理中、已完成、失败的文档数
+            processing_count = db.query(func.count(Document.id)).filter(
+                Document.knowledge_base_id == kb.id,
+                Document.status == "processing"
+            ).scalar()
+
+            completed_count = db.query(func.count(Document.id)).filter(
+                Document.knowledge_base_id == kb.id,
+                Document.status == "completed"
+            ).scalar()
+
+            failed_count = db.query(func.count(Document.id)).filter(
+                Document.knowledge_base_id == kb.id,
+                Document.status == "failed"
+            ).scalar()
+
+            kb_details.append({
+                "id": kb.id,
+                "name": kb.name,
+                "description": kb.description,
+                "doc_count": kb_doc_count,
+                "processing_count": processing_count,
+                "completed_count": completed_count,
+                "failed_count": failed_count,
+                "created_at": kb.created_at.isoformat() if kb.created_at else None,
+                "updated_at": kb.updated_at.isoformat() if kb.updated_at else None
+            })
+
+        if kb_count > 0 or doc_count > 0:  # 只包含有知识库或文档的用户
+            user_kb_stats.append({
+                "user_id": user.id,
+                "username": user.username,
+                "kb_count": kb_count,
+                "doc_count": doc_count,
+                "knowledge_bases": kb_details
+            })
+
+        total_kbs += kb_count
+        total_docs += doc_count
+
+    return {
+        "total_knowledge_bases": total_kbs,
+        "total_documents": total_docs,
+        "user_stats": user_kb_stats
     }
