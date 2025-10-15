@@ -70,6 +70,14 @@ export interface KnowledgeBase {
   has_processing_docs: boolean;  // 是否有正在处理中的文档
   created_at: string;
   updated_at: string;
+  // 共享相关字段
+  is_owner?: boolean;  // 是否为拥有者
+  user_id?: number;  // 所有者ID（用于分享功能）
+  is_shared?: boolean;  // 是否为共享知识库
+  is_shareable?: boolean;  // 是否可分享（仅自己的知识库）
+  owner_username?: string;  // 所有者用户名（仅共享知识库）
+  permission?: 'read' | 'none';  // 权限（仅共享知识库）：read=可读, none=不可读
+  shared_at?: string;  // 分享时间（仅共享知识库）
 }
 
 export interface KnowledgeSource {
@@ -98,6 +106,8 @@ export interface KnowledgeBaseDetail {
   documents: Document[];
   created_at: string;
   updated_at: string;
+  is_owner?: boolean;  // 是否为拥有者
+  permission?: 'owner' | 'read' | 'none';  // 权限：owner=所有者, read=可读, none=不可读
 }
 
 export interface KnowledgeBaseCreateRequest {

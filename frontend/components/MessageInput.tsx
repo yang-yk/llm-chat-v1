@@ -215,23 +215,56 @@ export default function MessageInput({
 
                   {/* 知识库下拉框 */}
                   {showKBDropdown && (
-                    <div className="absolute left-0 bottom-full mb-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10 flex flex-col">
-                      <div className="p-1.5 overflow-y-auto flex-1" style={{ maxHeight: '180px' }}>
+                    <div className="absolute left-0 bottom-full mb-2 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-10 flex flex-col">
+                      <div className="p-1.5 overflow-y-auto flex-1" style={{ maxHeight: '280px' }}>
                         <div className="text-xs text-gray-600 px-2 py-1 mb-0.5 font-medium">选择知识库（可多选）</div>
-                        {knowledgeBases.map((kb) => (
-                          <label
-                            key={kb.id}
-                            className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer transition-colors"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedKBIds.includes(kb.id)}
-                              onChange={() => toggleKB(kb.id)}
-                              className="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500 flex-shrink-0"
-                            />
-                            <span className="text-sm text-gray-700 truncate flex-1">{kb.name}</span>
-                          </label>
-                        ))}
+
+                        {/* 我的知识库 */}
+                        {knowledgeBases.filter(kb => kb.is_owner).length > 0 && (
+                          <>
+                            <div className="text-xs text-gray-500 px-2 py-1 mt-2 font-medium">我的知识库</div>
+                            {knowledgeBases.filter(kb => kb.is_owner).map((kb) => (
+                              <label
+                                key={kb.id}
+                                className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer transition-colors group"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedKBIds.includes(kb.id)}
+                                  onChange={() => toggleKB(kb.id)}
+                                  className="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500 flex-shrink-0"
+                                />
+                                <span className="text-sm text-gray-700 truncate flex-1">{kb.name}</span>
+                                <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded opacity-0 group-hover:opacity-100 transition-opacity">我的</span>
+                              </label>
+                            ))}
+                          </>
+                        )}
+
+                        {/* 共享的知识库 */}
+                        {knowledgeBases.filter(kb => kb.is_shared).length > 0 && (
+                          <>
+                            <div className="text-xs text-gray-500 px-2 py-1 mt-2 font-medium">共享的知识库</div>
+                            {knowledgeBases.filter(kb => kb.is_shared).map((kb) => (
+                              <label
+                                key={kb.id}
+                                className="flex items-center gap-2 px-2 py-1.5 hover:bg-purple-50 rounded cursor-pointer transition-colors group"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedKBIds.includes(kb.id)}
+                                  onChange={() => toggleKB(kb.id)}
+                                  className="w-3.5 h-3.5 text-purple-600 rounded focus:ring-purple-500 flex-shrink-0"
+                                />
+                                <div className="flex flex-col flex-1 min-w-0">
+                                  <span className="text-sm text-gray-700 truncate">{kb.name}</span>
+                                  <span className="text-xs text-gray-500 truncate">by {kb.owner_username}</span>
+                                </div>
+                                <span className="px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded opacity-0 group-hover:opacity-100 transition-opacity">共享</span>
+                              </label>
+                            ))}
+                          </>
+                        )}
                       </div>
                       <div className="border-t border-gray-200 p-1.5 bg-gray-50 flex-shrink-0">
                         <button

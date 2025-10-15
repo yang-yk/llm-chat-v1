@@ -118,16 +118,59 @@ class DocumentParser:
         """解析DOCX文件"""
         try:
             from docx import Document
+            import zipfile
 
+            print(f"[INFO] 开始解析DOCX文件: {file_path}")
+
+            # 验证文件存在
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"文件不存在: {file_path}")
+
+            # 验证文件大小
+            file_size = os.path.getsize(file_path)
+            print(f"[INFO] DOCX文件大小: {file_size} 字节")
+
+            if file_size == 0:
+                raise Exception("DOCX文件为空")
+
+            # 验证是否是有效的 ZIP 文件（DOCX 本质上是 ZIP）
+            if not zipfile.is_zipfile(file_path):
+                # 尝试检测是否是旧版 DOC 格式
+                with open(file_path, 'rb') as f:
+                    header = f.read(8)
+                    # DOC 文件通常以 D0 CF 11 E0 开头（OLE2 格式）
+                    if header[:4] == b'\xD0\xCF\x11\xE0':
+                        raise Exception(
+                            f"该文件实际上是旧版 DOC 格式（Word 2003 或更早版本），而不是 DOCX 格式。\n\n"
+                            f"解决方案：\n"
+                            f"1. 使用 Word 打开文件，另存为 .docx 格式后重新上传\n"
+                            f"2. 或将文件扩展名改为 .doc 后上传（系统支持 DOC 格式）"
+                        )
+                    else:
+                        raise Exception(
+                            f"文件不是有效的 DOCX 格式。DOCX 文件本质上是 ZIP 压缩包，但该文件不是 ZIP 格式。\n\n"
+                            f"可能的原因：\n"
+                            f"1. 文件损坏或不完整\n"
+                            f"2. 文件是其他格式但扩展名被修改为 .docx\n"
+                            f"3. 文件是旧版 DOC 格式\n\n"
+                            f"建议：使用 Microsoft Word 重新保存为 .docx 格式后再上传"
+                        )
+
+            # 尝试打开 DOCX 文件
+            print(f"[INFO] 尝试打开DOCX文件...")
             doc = Document(file_path)
+            print(f"[INFO] DOCX文件打开成功")
+
             text_content = []
 
             # 提取段落文本
+            print(f"[INFO] 提取段落文本...")
             for paragraph in doc.paragraphs:
                 if paragraph.text.strip():
                     text_content.append(paragraph.text)
 
             # 提取表格文本
+            print(f"[INFO] 提取表格文本...")
             for table in doc.tables:
                 for row in table.rows:
                     row_text = ' | '.join([cell.text.strip() for cell in row.cells])
@@ -135,10 +178,18 @@ class DocumentParser:
                         text_content.append(row_text)
 
             content = '\n\n'.join(text_content)
+            print(f"[INFO] DOCX解析成功，提取文本长度: {len(content)}")
             return content.strip()
+
         except ImportError:
             raise Exception("需要安装 python-docx 库: pip install python-docx")
+        except FileNotFoundError as e:
+            print(f"[ERROR] 文件不存在: {str(e)}")
+            raise Exception(f"文件不存在: {str(e)}")
         except Exception as e:
+            print(f"[ERROR] 解析DOCX失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise Exception(f"解析DOCX文件失败: {str(e)}")
 
     @staticmethod

@@ -53,6 +53,7 @@ config-backup-*/
 # Project specific
 backend/conversation.db
 backend/server.log
+backend/uploads/
 frontend/.next/
 frontend/out/
 

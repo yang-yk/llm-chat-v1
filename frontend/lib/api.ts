@@ -575,8 +575,8 @@ export async function createKnowledgeBase(data: KnowledgeBaseCreateRequest): Pro
   return response.json();
 }
 
-// 获取所有知识库
-export async function getKnowledgeBases(): Promise<KnowledgeBase[]> {
+// 获取所有知识库（包括自己的和共享的）
+export async function getKnowledgeBases(): Promise<{ own: KnowledgeBase[]; shared: KnowledgeBase[] }> {
   const response = await fetch(`${API_BASE_URL}/api/knowledge-bases`, {
     method: 'GET',
     headers: getAuthHeaders(),
@@ -590,7 +590,10 @@ export async function getKnowledgeBases(): Promise<KnowledgeBase[]> {
   }
 
   const data = await response.json();
-  return data.knowledge_bases;
+  return {
+    own: data.own || [],
+    shared: data.shared || []
+  };
 }
 
 // 获取知识库详情
@@ -659,6 +662,47 @@ export async function deleteKnowledgeBase(kbId: number): Promise<void> {
   }
 }
 
+// 复制知识库
+export async function copyKnowledgeBase(kbId: number, newName: string): Promise<any> {
+  const formData = new FormData();
+  formData.append('new_name', newName);
+
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}/copy`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 404) {
+      throw new Error('知识库不存在');
+    }
+    // 尝试从响应中获取具体的错误信息
+    try {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || '复制知识库失败');
+    } catch (e) {
+      if (e instanceof Error && e.message !== '复制知识库失败') {
+        throw e;
+      }
+      throw new Error('复制知识库失败');
+    }
+  }
+
+  return response.json();
+}
+
+// 重命名知识库（使用现有的 updateKnowledgeBase 函数）
+export async function renameKnowledgeBase(kbId: number, newName: string): Promise<void> {
+  return updateKnowledgeBase(kbId, { name: newName });
+}
+
 // 上传文档到知识库
 export async function uploadDocument(kbId: number, file: File): Promise<Document> {
   const formData = new FormData();
@@ -682,6 +726,41 @@ export async function uploadDocument(kbId: number, file: File): Promise<Document
       throw new Error(error.detail || '不支持的文件类型');
     }
     throw new Error('上传文档失败');
+  }
+
+  return response.json();
+}
+
+// 批量上传文档到知识库
+export async function uploadDocumentsBatch(kbId: number, files: File[]): Promise<{
+  message: string;
+  results: {
+    success: Array<{ filename: string; doc?: Document }>;
+    failed: Array<{ filename: string; error: string }>;
+    total: number;
+  };
+}> {
+  const formData = new FormData();
+  files.forEach(file => formData.append('files', file));
+
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}/documents/batch`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 400) {
+      const error = await response.json();
+      throw new Error(error.detail || '批量上传失败');
+    }
+    throw new Error('批量上传失败');
   }
 
   return response.json();
@@ -905,6 +984,157 @@ export async function getTempDocumentInfo(docId: string): Promise<any> {
       throw new Error('文档不存在或已过期');
     }
     throw new Error('获取文档信息失败');
+  }
+
+  return response.json();
+}
+
+// ==================== 知识库分享API ====================
+
+// 管理员分享知识库给用户
+export async function shareKnowledgeBase(
+  kbId: number,
+  userIds: number[],
+  permission: 'read' | 'none' = 'read'
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/knowledge-bases/share`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      kb_id: kbId,
+      user_ids: userIds,
+      permission
+    }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 403) {
+      throw new Error('需要管理员权限');
+    }
+    const error = await response.json();
+    throw new Error(error.detail || '分享知识库失败');
+  }
+
+  return response.json();
+}
+
+// 管理员取消知识库分享
+export async function unshareKnowledgeBase(
+  kbId: number,
+  userIds: number[]
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/knowledge-bases/unshare`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      kb_id: kbId,
+      user_ids: userIds
+    }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 403) {
+      throw new Error('需要管理员权限');
+    }
+    const error = await response.json();
+    throw new Error(error.detail || '取消分享失败');
+  }
+
+  return response.json();
+}
+
+// 获取知识库的分享列表（管理员）
+export async function getKnowledgeBaseShares(kbId: number): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/knowledge-bases/${kbId}/shares`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 403) {
+      throw new Error('需要管理员权限');
+    }
+    throw new Error('获取分享列表失败');
+  }
+
+  return response.json();
+}
+
+// 更新分享权限（管理员）
+export async function updateSharePermission(
+  kbId: number,
+  userId: number,
+  permission: 'read' | 'none'
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/knowledge-bases/${kbId}/shares/${userId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ permission }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 403) {
+      throw new Error('需要管理员权限');
+    }
+    const error = await response.json();
+    throw new Error(error.detail || '更新权限失败');
+  }
+
+  return response.json();
+}
+
+// 设置知识库是否可分享（管理员）
+export async function setKnowledgeBaseShareable(
+  kbId: number,
+  isShareable: boolean
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/knowledge-bases/set-shareable`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      kb_id: kbId,
+      is_shareable: isShareable
+    }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    if (response.status === 403) {
+      throw new Error('需要管理员权限');
+    }
+    const error = await response.json();
+    throw new Error(error.detail || '设置失败');
+  }
+
+  return response.json();
+}
+
+// 获取分享给我的知识库列表
+export async function getSharedKnowledgeBases(): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/shared`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('未登录或登录已过期');
+    }
+    throw new Error('获取共享知识库列表失败');
   }
 
   return response.json();

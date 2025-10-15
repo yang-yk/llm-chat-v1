@@ -153,6 +153,26 @@ class KnowledgeBaseUpdate(BaseModel):
     description: Optional[str] = None
 
 
+class KnowledgeBaseShareRequest(BaseModel):
+    kb_id: int
+    user_ids: List[int]
+    permission: str = "read_only"  # read_only 或 editable
+
+
+class KnowledgeBaseUnshareRequest(BaseModel):
+    kb_id: int
+    user_ids: List[int]
+
+
+class KnowledgeBaseShareableRequest(BaseModel):
+    kb_id: int
+    is_shareable: bool
+
+
+class UpdateSharePermissionRequest(BaseModel):
+    permission: str  # read_only 或 editable
+
+
 # 临时文档问答相关模型
 class TempDocChatRequest(BaseModel):
     doc_id: str
@@ -301,7 +321,8 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         "user": {
             "id": new_user.id,
             "username": new_user.username,
-            "email": new_user.email
+            "email": new_user.email,
+            "is_admin": new_user.is_admin
         }
     }
 
@@ -335,7 +356,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
         "user": {
             "id": user.id,
             "username": user.username,
-            "email": user.email
+            "email": user.email,
+            "is_admin": user.is_admin
         }
     }
 
@@ -1134,10 +1156,10 @@ async def list_knowledge_bases(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """获取用户的所有知识库"""
+    """获取用户的所有知识库（包括自己的和共享的）"""
     try:
-        kbs = knowledge_base_service.get_knowledge_bases(db, current_user.id)
-        return {"knowledge_bases": kbs}
+        result = knowledge_base_service.get_knowledge_bases(db, current_user.id, include_shared=True)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1208,6 +1230,33 @@ async def delete_knowledge_base(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/knowledge-bases/{kb_id}/copy")
+async def copy_knowledge_base(
+    kb_id: int,
+    new_name: str = Form(...),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """复制知识库"""
+    try:
+        new_kb = await knowledge_base_service.copy_knowledge_base(
+            db=db,
+            kb_id=kb_id,
+            user_id=current_user.id,
+            new_name=new_name
+        )
+        return {
+            "id": new_kb.id,
+            "name": new_kb.name,
+            "description": new_kb.description,
+            "message": f"知识库已复制为: {new_name}"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/knowledge-bases/{kb_id}/documents")
 async def upload_document(
     kb_id: int,
@@ -1215,7 +1264,7 @@ async def upload_document(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """上传文档到知识库"""
+    """上传单个文档到知识库"""
     try:
         # 验证文件类型
         filename = file.filename
@@ -1254,6 +1303,83 @@ async def upload_document(
         raise HTTPException(status_code=500, detail=f"上传文档失败: {str(e)}")
 
 
+@app.post("/api/knowledge-bases/{kb_id}/documents/batch")
+async def upload_documents_batch(
+    kb_id: int,
+    files: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """批量上传文档到知识库"""
+    try:
+        if not files or len(files) == 0:
+            raise HTTPException(status_code=400, detail="请至少选择一个文件")
+
+        results = {
+            "success": [],
+            "failed": [],
+            "total": len(files)
+        }
+
+        for file in files:
+            try:
+                # 验证文件名
+                filename = file.filename
+                if not filename:
+                    results["failed"].append({
+                        "filename": "未知文件",
+                        "error": "文件名不能为空"
+                    })
+                    continue
+
+                # 获取文件扩展名
+                file_ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+                if file_ext not in ['txt', 'pdf', 'doc', 'docx']:
+                    results["failed"].append({
+                        "filename": filename,
+                        "error": f"不支持的文件类型: {file_ext}"
+                    })
+                    continue
+
+                # 读取文件内容
+                file_content = await file.read()
+
+                # 添加文档
+                doc = await knowledge_base_service.add_document(
+                    db=db,
+                    kb_id=kb_id,
+                    user_id=current_user.id,
+                    filename=filename,
+                    file_content=file_content,
+                    file_type=file_ext
+                )
+
+                results["success"].append({
+                    "id": doc.id,
+                    "filename": doc.filename,
+                    "file_type": doc.file_type,
+                    "file_size": doc.file_size,
+                    "status": doc.status,
+                    "created_at": doc.created_at.isoformat() if doc.created_at else None
+                })
+
+            except Exception as e:
+                results["failed"].append({
+                    "filename": filename if 'filename' in locals() else "未知文件",
+                    "error": str(e)
+                })
+
+        return {
+            "message": f"批量上传完成：成功 {len(results['success'])} 个，失败 {len(results['failed'])} 个",
+            "results": results
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"批量上传失败: {str(e)}")
+
+
 @app.get("/api/knowledge-bases/{kb_id}/documents")
 async def list_documents(
     kb_id: int,
@@ -1282,6 +1408,115 @@ async def delete_document(
         return {"message": "文档已删除"}
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 知识库分享API（管理员） ====================
+
+@app.post("/api/admin/knowledge-bases/share")
+async def share_knowledge_base(
+    request: KnowledgeBaseShareRequest,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """管理员分享知识库给指定用户"""
+    try:
+        result = knowledge_base_service.share_knowledge_base(
+            db=db,
+            kb_id=request.kb_id,
+            admin_user_id=current_admin.id,
+            target_user_ids=request.user_ids,
+            permission=request.permission
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/knowledge-bases/unshare")
+async def unshare_knowledge_base(
+    request: KnowledgeBaseUnshareRequest,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """管理员取消知识库分享"""
+    try:
+        result = knowledge_base_service.unshare_knowledge_base(
+            db=db,
+            kb_id=request.kb_id,
+            admin_user_id=current_admin.id,
+            target_user_ids=request.user_ids
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/knowledge-bases/{kb_id}/shares")
+async def get_kb_share_list(
+    kb_id: int,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """获取知识库的分享列表（管理员）"""
+    try:
+        shares = knowledge_base_service.get_kb_share_list(db, kb_id, current_admin.id)
+        return {"shares": shares}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/admin/knowledge-bases/{kb_id}/shares/{user_id}")
+async def update_share_permission(
+    kb_id: int,
+    user_id: int,
+    request: UpdateSharePermissionRequest,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """更新分享权限（管理员）"""
+    try:
+        result = knowledge_base_service.update_share_permission(
+            db=db,
+            kb_id=kb_id,
+            admin_user_id=current_admin.id,
+            target_user_id=user_id,
+            permission=request.permission
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/knowledge-bases/set-shareable")
+async def set_knowledge_base_shareable(
+    request: KnowledgeBaseShareableRequest,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """设置知识库是否可分享（管理员）"""
+    try:
+        result = knowledge_base_service.set_knowledge_base_shareable(
+            db=db,
+            kb_id=request.kb_id,
+            admin_user_id=current_admin.id,
+            is_shareable=request.is_shareable
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/knowledge-bases/shared")
+async def get_shared_knowledge_bases(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """获取分享给当前用户的知识库列表"""
+    try:
+        shared_kbs = knowledge_base_service.get_shared_knowledge_bases(db, current_user.id)
+        return {"shared_knowledge_bases": shared_kbs}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

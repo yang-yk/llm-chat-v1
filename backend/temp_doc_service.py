@@ -168,7 +168,7 @@ class TempDocService:
 
             # 对问题进行向量化
             print(f"[INFO] 开始向量检索，问题: {query[:50]}...")
-            query_embedding = await embedding_service.generate_embedding(query)
+            query_embedding = await embedding_service.get_embedding(query)
 
             # 计算每个块的相似度
             chunk_scores = []

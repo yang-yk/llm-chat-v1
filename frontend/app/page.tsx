@@ -80,8 +80,18 @@ export default function Home() {
 
   const loadKnowledgeBases = async () => {
     try {
-      const kbs = await getKnowledgeBases();
-      setKnowledgeBases(kbs);
+      const { own, shared } = await getKnowledgeBases();
+      // 合并自己的和共享的知识库，传递给MessageInput
+      const allKbs = [...own, ...shared];
+
+      // 只有在知识库真正发生变化时才更新state，避免不必要的重新渲染
+      setKnowledgeBases(prev => {
+        // 比较新旧知识库列表，检查是否有变化
+        if (JSON.stringify(prev) === JSON.stringify(allKbs)) {
+          return prev; // 没有变化，返回旧的引用，不触发重新渲染
+        }
+        return allKbs; // 有变化，更新state
+      });
     } catch (error) {
       console.error('加载知识库列表失败:', error);
       // 不阻塞用户使用，只是没有知识库功能

@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
-from database import KnowledgeBase, Document, DocumentChunk
+from database import KnowledgeBase, Document, DocumentChunk, KnowledgeBaseShare
 from embedding_service import embedding_service
 
 
@@ -58,15 +58,25 @@ class RAGService:
             else:
                 effective_threshold = similarity_threshold if similarity_threshold else self.similarity_threshold
 
-            # 3. 验证知识库权限并获取所有文档块
+            # 3. 验证知识库权限（支持共享知识库）
             valid_kb_ids = []
             for kb_id in kb_ids:
+                # 检查是否是所有者
                 kb = db.query(KnowledgeBase).filter(
                     KnowledgeBase.id == kb_id,
                     KnowledgeBase.user_id == user_id
                 ).first()
+
                 if kb:
                     valid_kb_ids.append(kb_id)
+                else:
+                    # 检查是否有分享权限
+                    share = db.query(KnowledgeBaseShare).filter(
+                        KnowledgeBaseShare.knowledge_base_id == kb_id,
+                        KnowledgeBaseShare.shared_to == user_id
+                    ).first()
+                    if share:
+                        valid_kb_ids.append(kb_id)
 
             if not valid_kb_ids:
                 return []
@@ -311,16 +321,28 @@ class RAGService:
                 effective_threshold = similarity_threshold
             print(f"[RAG] 步骤3: 查询长度={query_length}, 使用阈值={effective_threshold}")
 
-            # 4. 验证知识库权限
+            # 4. 验证知识库权限（支持共享知识库）
             valid_kb_ids = []
             for kb_id in kb_ids:
+                # 检查是否是所有者
                 kb = db.query(KnowledgeBase).filter(
                     KnowledgeBase.id == kb_id,
                     KnowledgeBase.user_id == user_id
                 ).first()
+
                 if kb:
                     valid_kb_ids.append(kb_id)
-                    print(f"[RAG] 知识库 {kb_id} ({kb.name}) 验证通过")
+                    print(f"[RAG] 知识库 {kb_id} ({kb.name}) 验证通过（所有者）")
+                else:
+                    # 检查是否有分享权限
+                    share = db.query(KnowledgeBaseShare).filter(
+                        KnowledgeBaseShare.knowledge_base_id == kb_id,
+                        KnowledgeBaseShare.shared_to == user_id
+                    ).first()
+                    if share:
+                        kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
+                        valid_kb_ids.append(kb_id)
+                        print(f"[RAG] 知识库 {kb_id} ({kb.name if kb else 'unknown'}) 验证通过（共享 - {share.permission}）")
 
             if not valid_kb_ids:
                 print(f"[RAG ERROR] 没有有效的知识库ID")

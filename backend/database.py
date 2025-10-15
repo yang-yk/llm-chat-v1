@@ -128,12 +128,15 @@ class KnowledgeBase(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # 所属用户ID
     name = Column(String(200), nullable=False)  # 知识库名称
     description = Column(Text, nullable=True)  # 知识库描述
+    is_shareable = Column(Boolean, default=False, nullable=False)  # 是否可分享（仅管理员可设置）
     created_at = Column(DateTime, default=get_beijing_time)
     updated_at = Column(DateTime, default=get_beijing_time, onupdate=get_beijing_time)
 
     # 关联用户和文档
     user = relationship("User")
     documents = relationship("Document", back_populates="knowledge_base", cascade="all, delete-orphan")
+    # 关联分享记录
+    shares = relationship("KnowledgeBaseShare", back_populates="knowledge_base", cascade="all, delete-orphan", foreign_keys="[KnowledgeBaseShare.knowledge_base_id]")
 
 
 class Document(Base):
@@ -169,6 +172,23 @@ class DocumentChunk(Base):
 
     # 关联文档
     document = relationship("Document", back_populates="chunks")
+
+
+class KnowledgeBaseShare(Base):
+    """知识库分享表"""
+    __tablename__ = "knowledge_base_shares"
+
+    id = Column(Integer, primary_key=True, index=True)
+    knowledge_base_id = Column(Integer, ForeignKey("knowledge_bases.id"), nullable=False)  # 知识库ID
+    shared_by = Column(Integer, ForeignKey("users.id"), nullable=False)  # 分享者ID（通常是管理员）
+    shared_to = Column(Integer, ForeignKey("users.id"), nullable=False)  # 被分享者ID
+    permission = Column(String(20), default="read", nullable=False)  # 权限：read/none (read=可读, none=不可读)
+    created_at = Column(DateTime, default=get_beijing_time)
+
+    # 关联
+    knowledge_base = relationship("KnowledgeBase", back_populates="shares", foreign_keys=[knowledge_base_id])
+    sharer = relationship("User", foreign_keys=[shared_by])
+    shared_user = relationship("User", foreign_keys=[shared_to])
 
 
 # 创建数据库引擎
